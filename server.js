@@ -1,51 +1,55 @@
-// 1. Cargamos las librerías necesarias
-require('dotenv').config(); // Lee tu archivo .env secreto
+require('dotenv').config();
 const express = require('express');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const pdf = require('pdf-parse');
 const fs = require('fs');
+const pdfjsLib = require('pdfjs-dist');
 
 const app = express();
 app.use(express.json());
 
-// 2. Configuramos Gemini con la clave que vive en process.env
-// (Recuerda que Node.js la saca del archivo .env automáticamente)
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
 
-// 3. Ruta para procesar un documento (Lógica RAG simplificada)
+// Función moderna para leer PDF sin errores de DOM
+async function getPdfText(path) {
+    const data = new Uint8Array(fs.readFileSync(path));
+    const loadingTask = pdfjsLib.getDocument({ data, useSystemFonts: true });
+    const pdf = await loadingTask.promise;
+    let fullText = "";
+    
+    for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => item.str).join(" ");
+        fullText += pageText + "\n";
+    }
+    return fullText;
+}
+
 app.post('/analizar', async (req, res) => {
     try {
-        const { pregunta, rutaArchivo } = req.body;
+        const { pregunta, nombreArchivo } = req.body;
+        const rutaCompleta = `./archivos/${nombreArchivo}`;
 
-        // --- PARTE LANGCHAIN / PARSER ---
-        // Leemos el archivo físico de tu Mac
-        const dataBuffer = fs.readFileSync(rutaArchivo);
-        const data = await pdf(dataBuffer);
-        const textoExtraido = data.text; // Aquí ya tenemos el texto del PDF
+        if (!fs.existsSync(rutaCompleta)) {
+            return res.status(404).json({ error: "Archivo no encontrado en la carpeta /archivos" });
+        }
 
-        // --- PARTE GEMINI ---
+        const textoExtraido = await getPdfText(rutaCompleta);
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-        // --- PARTE RAG ---
-        // Combinamos el texto del archivo con la pregunta del usuario
         const prompt = `
-            Eres SandBox AI. Utiliza el siguiente contenido para responder.
-            CONTENIDO DEL ARCHIVO: ${textoExtraido.substring(0, 20000)} 
-            PREGUNTA DEL USUARIO: ${pregunta}
+            Actúa como SandBox AI. Usa este contexto para responder:
+            CONTEXTO: ${textoExtraido.substring(0, 30000)}
+            PREGUNTA: ${pregunta}
         `;
 
         const result = await model.generateContent(prompt);
-        const respuestaIA = result.response.text();
-
-        res.json({ respuesta: respuestaIA });
+        res.json({ respuesta: result.response.text() });
 
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: "Hubo un error procesando el archivo." });
+        res.status(500).json({ error: "Error interno: " + error.message });
     }
 });
 
-const PORT = 3000;
-app.listen(PORT, () => {
-    console.log(`🚀 SandBox AI Backend corriendo en http://localhost:${PORT}`);
-});
+app.listen(3000, () => console.log("🚀 SandBox AI listo en el puerto 3000"));
