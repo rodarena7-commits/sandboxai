@@ -12,77 +12,61 @@ app.use(express.json());
 
 const upload = multer({ dest: 'uploads/' });
 
-// Configuración de DeepSeek usando el cliente de OpenAI
-const openai = new OpenAI({
-  baseURL: 'https://api.deepseek.com',
-  apiKey: process.env.DEEPSEEK_API_KEY, // Asegúrate de cambiar el nombre en Render
+// Configuración de Grok (xAI) usando el cliente compatible de OpenAI
+const client = new OpenAI({
+  apiKey: process.env.GROK_API_KEY,
+  baseURL: "https://api.x.ai/v1",
 });
 
-// Ruta de salud
 app.get('/', (req, res) => {
-  res.send('🚀 SandBox AI: DeepSeek Engine Online');
+  res.send('🚀 SandBox AI: Grok Engine Online');
 });
 
-// Ruta principal de análisis
 app.post('/analizar', upload.single('archivo'), async (req, res) => {
   try {
     const { pregunta } = req.body;
     const file = req.file;
 
-    if (!file) {
-      return res.status(400).json({ error: "No se subió ningún archivo." });
-    }
+    if (!file) return res.status(400).json({ error: "No se subió ningún archivo." });
 
-    console.log(`📂 Procesando con DeepSeek: ${file.originalname}`);
+    console.log(`📂 Procesando con Grok: ${file.originalname}`);
 
     let contenidoExtraido = "";
 
-    // 1. Extraer texto según el tipo de archivo
+    // Extracción de texto del PDF
     if (file.mimetype === 'application/pdf') {
       const dataBuffer = fs.readFileSync(file.path);
       const data = await pdf(dataBuffer);
       contenidoExtraido = data.text;
     } else {
-      // Para archivos de texto simple (.txt, .js, etc)
       contenidoExtraido = fs.readFileSync(file.path, 'utf8');
     }
 
-    // 2. Llamada a DeepSeek Chat
-    const completion = await openai.chat.completions.create({
-      model: "deepseek-chat",
+    // Llamada a Grok
+    const completion = await client.chat.completions.create({
+      model: "grok-beta", // También puedes usar "grok-2" si tu cuenta lo permite
       messages: [
         { 
           role: "system", 
-          content: "Eres SandBox AI Pro. Analiza el siguiente contenido y responde a la pregunta del usuario basándote en la información proporcionada." 
+          content: "Eres SandBox AI, un asistente experto. Analiza el documento proporcionado y responde con precisión." 
         },
         { 
           role: "user", 
-          content: `CONTENIDO DEL DOCUMENTO:\n${contenidoExtraido}\n\nPREGUNTA: ${pregunta || "Haz un resumen"}` 
+          content: `Documento:\n${contenidoExtraido}\n\nPregunta: ${pregunta || "Haz un resumen"}` 
         },
       ],
-      stream: false,
     });
 
-    // 3. Limpieza de archivos temporales
-    if (fs.existsSync(file.path)) {
-      fs.unlinkSync(file.path);
-    }
+    if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
     res.json({ respuesta: completion.choices[0].message.content });
 
   } catch (error) {
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
-    console.error("❌ Error en DeepSeek Core:", error.message);
-    res.status(500).json({ 
-      error: "Error procesando con DeepSeek", 
-      details: error.message 
-    });
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    console.error("❌ Error en Grok Core:", error.message);
+    res.status(500).json({ error: "Error en el motor Grok", details: error.message });
   }
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log(`🚀 Motor DeepSeek activo en puerto ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Grok activo en puerto ${PORT}`));
