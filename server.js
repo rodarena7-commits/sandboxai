@@ -37,12 +37,13 @@ app.post('/analizar', upload.single('archivo'), async (req, res) => {
       const dataBuffer = fs.readFileSync(file.path);
       const data = await pdf(dataBuffer);
       
-      // SOLUCIÓN AL ERROR 413: Recortamos el texto para no exceder los límites de la API gratuita
-      // 40,000 caracteres son aproximadamente entre 10,000 y 15,000 tokens, lo cual es seguro para Groq Free.
-      contenidoExtraido = data.text.substring(0, 40000);
+      // AJUSTE DE SEGURIDAD PARA TPM:
+      // Bajamos a 30,000 caracteres para asegurar que no exceda los 12,000 tokens por minuto
+      // que permite la capa gratuita de Groq para el modelo 70B.
+      contenidoExtraido = data.text.substring(0, 30000);
       console.log(`📏 Texto extraído: ${data.text.length} caracteres. Recortado a: ${contenidoExtraido.length}`);
     } else {
-      contenidoExtraido = fs.readFileSync(file.path, 'utf8').substring(0, 40000);
+      contenidoExtraido = fs.readFileSync(file.path, 'utf8').substring(0, 30000);
     }
 
     const completion = await groq.chat.completions.create({
@@ -50,11 +51,11 @@ app.post('/analizar', upload.single('archivo'), async (req, res) => {
       messages: [
         { 
           role: "system", 
-          content: "Eres SandBox AI Pro. Responde basándote en el texto proporcionado. Si el texto parece cortado, es debido a límites de tamaño, responde con lo mejor que tengas disponible." 
+          content: "Eres SandBox AI Pro. Responde de forma concisa basándote en el texto proporcionado para ahorrar tokens. Si el texto está cortado, analiza lo que tienes disponible." 
         },
         { 
           role: "user", 
-          content: `CONTENIDO DEL DOCUMENTO (Fragmento):\n${contenidoExtraido}\n\nPREGUNTA: ${pregunta || "Resumen"}` 
+          content: `DOC:\n${contenidoExtraido}\n\nPREGUNTA: ${pregunta || "Resumen"}` 
         },
       ],
       temperature: 0.5,
