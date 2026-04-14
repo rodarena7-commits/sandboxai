@@ -1,7 +1,7 @@
 {
   "name": "sandbox-ai",
   "version": "1.0.0",
-  "description": "SandBox AI - Grok Engine Edition",
+  "description": "SandBox AI - Groq Turbo Edition",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
