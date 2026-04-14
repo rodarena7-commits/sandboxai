@@ -3,7 +3,6 @@ const express = require('express');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const fs = require('fs');
 const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
-const pdfjsLib = require('pdfjs-dist/build/pdf.js');
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = false;
 
