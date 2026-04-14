@@ -9,22 +9,19 @@
     "preview": "vite preview",
     "start": "node server.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
-    "@google/generative-ai": "^0.x.x",
+    "@google/generative-ai": "^0.11.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.x.x",
-    "express": "^4.x.x",
-    "lucide-react": "^0.x.x",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "lucide-react": "^0.378.0",
     "multer": "^1.4.5-lts.1",
     "pdfjs-dist": "3.4.120",
-    "react": "^18.x.x",
-    "react-dom": "^18.x.x"
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "vite": "^5.x.x",
-    "@vitejs/plugin-react": "^4.x.x"
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.2.11"
   }
 }
