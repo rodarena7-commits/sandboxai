@@ -12,14 +12,15 @@ app.use(express.json());
 
 const upload = multer({ dest: 'uploads/' });
 
-// Configuración de Grok (xAI) usando el cliente compatible de OpenAI
-const client = new OpenAI({
-  apiKey: process.env.GROK_API_KEY,
-  baseURL: "https://api.x.ai/v1",
+// Configuración de Groq
+// Usamos el cliente de OpenAI apuntando a los servidores de Groq
+const groq = new OpenAI({
+  apiKey: process.env.GROQ_API_KEY,
+  baseURL: "https://api.groq.com/openai/v1",
 });
 
 app.get('/', (req, res) => {
-  res.send('🚀 SandBox AI: Grok Engine Online');
+  res.send('🚀 SandBox AI: Groq Turbo Engine Online (Llama 3.1)');
 });
 
 app.post('/analizar', upload.single('archivo'), async (req, res) => {
@@ -27,13 +28,13 @@ app.post('/analizar', upload.single('archivo'), async (req, res) => {
     const { pregunta } = req.body;
     const file = req.file;
 
-    if (!file) return res.status(400).json({ error: "No se subió ningún archivo." });
+    if (!file) return res.status(400).json({ error: "Archivo no recibido." });
 
-    console.log(`📂 Procesando con Grok: ${file.originalname}`);
+    console.log(`📂 Procesando con Groq: ${file.originalname}`);
 
     let contenidoExtraido = "";
 
-    // Extracción de texto del PDF
+    // Leemos el PDF localmente
     if (file.mimetype === 'application/pdf') {
       const dataBuffer = fs.readFileSync(file.path);
       const data = await pdf(dataBuffer);
@@ -42,31 +43,39 @@ app.post('/analizar', upload.single('archivo'), async (req, res) => {
       contenidoExtraido = fs.readFileSync(file.path, 'utf8');
     }
 
-  // REEMPLAZA ESTA PARTE EN TU SERVER.JS:
-const completion = await client.chat.completions.create({
-  model: "grok-2-1212", // Este es el nombre exacto de la versión estable
-  messages: [
-    { 
-      role: "system", 
-      content: "Eres SandBox AI, experto en análisis. Responde basándote en el texto." 
-    },
-    { 
-      role: "user", 
-      content: `Documento:\n${contenidoExtraido}\n\nPregunta: ${pregunta || "Haz un resumen"}` 
-    },
-  ],
-});
+    // Llamada a Groq usando Llama 3.1 70B
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.1-70b-versatile",
+      messages: [
+        { 
+          role: "system", 
+          content: "Eres SandBox AI Pro, un asistente experto en análisis de documentos técnicos. Responde de forma clara y precisa basándote en el texto proporcionado." 
+        },
+        { 
+          role: "user", 
+          content: `CONTENIDO DEL DOCUMENTO:\n${contenidoExtraido}\n\nPREGUNTA DEL USUARIO: ${pregunta || "Haz un resumen estructurado"}` 
+        },
+      ],
+      temperature: 0.5,
+    });
 
+    // Limpiar archivo temporal
     if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
     res.json({ respuesta: completion.choices[0].message.content });
 
   } catch (error) {
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    console.error("❌ Error en Grok Core:", error.message);
-    res.status(500).json({ error: "Error en el motor Grok", details: error.message });
+    console.error("❌ Error en Groq Core:", error.message);
+    
+    res.status(500).json({ 
+      error: "Error en el motor Groq", 
+      details: error.message 
+    });
   }
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`🚀 Grok activo en puerto ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`🚀 Motor Groq listo en puerto ${PORT}`);
+});
