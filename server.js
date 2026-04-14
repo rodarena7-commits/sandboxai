@@ -2,14 +2,20 @@ require('dotenv').config();
 const express = require('express');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const fs = require('fs');
+<<<<<<< HEAD
 const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
+=======
+const pdfjsLib = require('pdfjs-dist/build/pdf.js');
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = false;
+>>>>>>> Final build: RAG system with dynamic port for Render
 
 const app = express();
 app.use(express.json());
-
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
 
 // Función moderna para leer PDF sin errores de DOM
+
 async function getPdfText(path) {
     const data = new Uint8Array(fs.readFileSync(path));
     const loadingTask = pdfjsLib.getDocument({ data, useSystemFonts: true });
@@ -52,4 +58,9 @@ app.post('/analizar', async (req, res) => {
     }
 });
 
-app.listen(3000, () => console.log("🚀 SandBox AI listo en el puerto 3000"));
+// Usamos el puerto que nos asigne el servidor o el 3000 por defecto
+const PORT = process.env.PORT || 3000; 
+
+app.listen(PORT, () => {
+    console.log(`🚀 SandBox AI en línea en el puerto ${PORT}`);
+});
