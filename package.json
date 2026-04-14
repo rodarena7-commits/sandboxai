@@ -1,25 +1,30 @@
 {
   "name": "sandbox-ai",
   "version": "1.0.0",
-  "description": "<<<<<<< HEAD # sandboxai ======= # SandBox AI >>>>>>> Primer commit: inicio del proyecto",
+  "description": "SandBox AI - Knowledge Hub",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-  },
+    "start": "node server.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "multer": "^2.1.1",
-    "pdfjs-dist": "^3.4.120"
+    "@google/generative-ai": "^0.x.x",
+    "cors": "^2.8.5",
+    "dotenv": "^16.x.x",
+    "express": "^4.x.x",
+    "lucide-react": "^0.x.x",
+    "multer": "^1.4.5-lts.1",
+    "pdfjs-dist": "3.4.120",
+    "react": "^18.x.x",
+    "react-dom": "^18.x.x"
+  },
+  "devDependencies": {
+    "vite": "^5.x.x",
+    "@vitejs/plugin-react": "^4.x.x"
   }
 }
