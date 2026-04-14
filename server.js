@@ -2,8 +2,9 @@ require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
 const cors = require('cors');
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const OpenAI = require('openai');
 const fs = require('fs');
+const pdf = require('pdf-parse');
 
 const app = express();
 app.use(cors());
@@ -11,50 +12,77 @@ app.use(express.json());
 
 const upload = multer({ dest: 'uploads/' });
 
-// Inicializamos el SDK
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
+// Configuración de DeepSeek usando el cliente de OpenAI
+const openai = new OpenAI({
+  baseURL: 'https://api.deepseek.com',
+  apiKey: process.env.DEEPSEEK_API_KEY, // Asegúrate de cambiar el nombre en Render
+});
 
-function fileToGenerativePart(path, mimeType) {
-  return {
-    inlineData: {
-      data: Buffer.from(fs.readFileSync(path)).toString("base64"),
-      mimeType
-    },
-  };
-}
+// Ruta de salud
+app.get('/', (req, res) => {
+  res.send('🚀 SandBox AI: DeepSeek Engine Online');
+});
 
-app.get('/', (req, res) => res.send('🚀 SandBox Core V1.5 Online'));
-
+// Ruta principal de análisis
 app.post('/analizar', upload.single('archivo'), async (req, res) => {
   try {
     const { pregunta } = req.body;
     const file = req.file;
 
-    if (!file) return res.status(400).json({ error: "Archivo no recibido." });
+    if (!file) {
+      return res.status(400).json({ error: "No se subió ningún archivo." });
+    }
 
-    console.log(`📂 Procesando: ${file.originalname}`);
+    console.log(`📂 Procesando con DeepSeek: ${file.originalname}`);
 
-    // SOLUCIÓN DEFINITIVA AL 404:
-    // Quitamos la especificación manual de apiVersion para que el SDK 0.12.0 
-    // use la ruta correcta automáticamente para 'gemini-1.5-flash'.
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-001" });
+    let contenidoExtraido = "";
 
-    const filePart = fileToGenerativePart(file.path, file.mimetype);
-    const prompt = `Analiza este documento y responde: ${pregunta || "Resumen"}`;
+    // 1. Extraer texto según el tipo de archivo
+    if (file.mimetype === 'application/pdf') {
+      const dataBuffer = fs.readFileSync(file.path);
+      const data = await pdf(dataBuffer);
+      contenidoExtraido = data.text;
+    } else {
+      // Para archivos de texto simple (.txt, .js, etc)
+      contenidoExtraido = fs.readFileSync(file.path, 'utf8');
+    }
 
-    const result = await model.generateContent([prompt, filePart]);
-    const response = await result.response;
-    const text = response.text();
-    
-    if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
-    res.json({ respuesta: text });
+    // 2. Llamada a DeepSeek Chat
+    const completion = await openai.chat.completions.create({
+      model: "deepseek-chat",
+      messages: [
+        { 
+          role: "system", 
+          content: "Eres SandBox AI Pro. Analiza el siguiente contenido y responde a la pregunta del usuario basándote en la información proporcionada." 
+        },
+        { 
+          role: "user", 
+          content: `CONTENIDO DEL DOCUMENTO:\n${contenidoExtraido}\n\nPREGUNTA: ${pregunta || "Haz un resumen"}` 
+        },
+      ],
+      stream: false,
+    });
+
+    // 3. Limpieza de archivos temporales
+    if (fs.existsSync(file.path)) {
+      fs.unlinkSync(file.path);
+    }
+
+    res.json({ respuesta: completion.choices[0].message.content });
 
   } catch (error) {
-    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    console.error("❌ Error en SandBox Core:", error.message);
-    res.status(500).json({ error: "Error interno en la IA", details: error.message });
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    console.error("❌ Error en DeepSeek Core:", error.message);
+    res.status(500).json({ 
+      error: "Error procesando con DeepSeek", 
+      details: error.message 
+    });
   }
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`🚀 Puerto ${PORT} listo.`));
+app.listen(PORT, () => {
+  console.log(`🚀 Motor DeepSeek activo en puerto ${PORT}`);
+});
