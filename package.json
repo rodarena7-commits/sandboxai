@@ -1,7 +1,7 @@
 {
   "name": "sandbox-ai",
   "version": "1.0.0",
-  "description": "SandBox AI - Universal Knowledge Hub",
+  "description": "SandBox AI - Universal Hub",
   "main": "server.js",
   "scripts": {
     "dev": "vite",
