@@ -42,20 +42,20 @@ app.post('/analizar', upload.single('archivo'), async (req, res) => {
       contenidoExtraido = fs.readFileSync(file.path, 'utf8');
     }
 
-    // Llamada a Grok
-    const completion = await client.chat.completions.create({
-      model: "grok-beta", // También puedes usar "grok-2" si tu cuenta lo permite
-      messages: [
-        { 
-          role: "system", 
-          content: "Eres SandBox AI, un asistente experto. Analiza el documento proporcionado y responde con precisión." 
-        },
-        { 
-          role: "user", 
-          content: `Documento:\n${contenidoExtraido}\n\nPregunta: ${pregunta || "Haz un resumen"}` 
-        },
-      ],
-    });
+  // REEMPLAZA ESTA PARTE EN TU SERVER.JS:
+const completion = await client.chat.completions.create({
+  model: "grok-2-1212", // Este es el nombre exacto de la versión estable
+  messages: [
+    { 
+      role: "system", 
+      content: "Eres SandBox AI, experto en análisis. Responde basándote en el texto." 
+    },
+    { 
+      role: "user", 
+      content: `Documento:\n${contenidoExtraido}\n\nPregunta: ${pregunta || "Haz un resumen"}` 
+    },
+  ],
+});
 
     if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
 
