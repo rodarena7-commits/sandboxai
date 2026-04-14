@@ -2,13 +2,10 @@ require('dotenv').config();
 const express = require('express');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const fs = require('fs');
-<<<<<<< HEAD
 const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
-=======
 const pdfjsLib = require('pdfjs-dist/build/pdf.js');
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = false;
->>>>>>> Final build: RAG system with dynamic port for Render
 
 const app = express();
 app.use(express.json());
