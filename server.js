@@ -6,16 +6,18 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const fs = require('fs');
 
 const app = express();
+
+// Middleware de CORS abierto para Vercel
 app.use(cors());
 app.use(express.json());
 
-// Configuración de Multer (Carpeta temporal para archivos)
+// Configuración de Multer para archivos temporales
 const upload = multer({ dest: 'uploads/' });
 
-// Inicialización de Google AI con la clave de tu usuario nuevo
+// Inicializar Google AI
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
 
-// Función para convertir archivos a Base64 para Gemini
+// Función para convertir archivos a formato Gemini
 function fileToGenerativePart(path, mimeType) {
   return {
     inlineData: {
@@ -25,55 +27,48 @@ function fileToGenerativePart(path, mimeType) {
   };
 }
 
+// Ruta base para chequear que Render está vivo
 app.get('/', (req, res) => {
-  res.send('🚀 SandBox AI Gemini Core está Activo.');
+  res.send('🚀 SandBox AI Universal Core está en línea.');
 });
 
+// Ruta principal de análisis
 app.post('/analizar', upload.single('archivo'), async (req, res) => {
   try {
     const { pregunta } = req.body;
     const file = req.file;
 
     if (!file) {
-      return res.status(400).json({ error: "No se recibió ningún archivo." });
+      return res.status(400).json({ error: "No se recibió archivo." });
     }
 
-    console.log(`📂 Procesando: ${file.originalname}`);
+    console.log(`📂 Procesando archivo: ${file.originalname}`);
 
-    // CONFIGURACIÓN DEL MODELO - Asegúrate que el nombre sea exacto
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // Usamos el alias -latest que suele resolver problemas de 404
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
-    // Convertimos el archivo subido
     const filePart = fileToGenerativePart(file.path, file.mimetype);
+    const prompt = `Actúa como SandBox AI. Analiza este contenido y responde: ${pregunta || "Haz un resumen"}`;
 
-    const prompt = `
-      Eres SandBox AI, un asistente experto. 
-      Analiza el contenido de este archivo y responde a la siguiente consulta:
-      
-      PREGUNTA: ${pregunta || "Haz un resumen detallado del contenido."}
-    `;
-
-    // Llamada a la IA
     const result = await model.generateContent([prompt, filePart]);
     const response = await result.response;
     const text = response.text();
 
-    // Limpieza de archivos temporales
+    // Borramos el archivo para no llenar el disco de Render
     fs.unlinkSync(file.path);
 
     res.json({ respuesta: text });
 
   } catch (error) {
-    if (req.file) fs.unlinkSync(req.file.path);
-    console.error("❌ Error en el Servidor:", error);
-    res.status(500).json({ 
-      error: "Error procesando el archivo", 
-      details: error.message 
-    });
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    console.error("❌ Error en SandBox Core:", error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
+  console.log(`🚀 SandBox AI listo en puerto ${PORT}`);
 });
