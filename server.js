@@ -45,7 +45,7 @@ app.post('/analizar', upload.single('archivo'), async (req, res) => {
 
     // Llamada a Groq usando Llama 3.1 70B
     const completion = await groq.chat.completions.create({
-      model: "llama-3.1-70b-versatile",
+      model: "llama-3.3-70b-versatile",
       messages: [
         { 
           role: "system", 
