@@ -1,0 +1,19 @@
+{
+  "name": "sandbox-ai",
+  "version": "1.0.0",
+  "description": "<<<<<<< HEAD # sandboxai ======= # SandBox AI >>>>>>> Primer commit: inicio del proyecto",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "pdfjs-dist": "^3.4.120"
+  }
+}
