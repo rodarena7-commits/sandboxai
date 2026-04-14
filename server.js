@@ -37,7 +37,7 @@ app.post('/analizar', upload.single('archivo'), async (req, res) => {
     // SOLUCIÓN DEFINITIVA AL 404:
     // Quitamos la especificación manual de apiVersion para que el SDK 0.12.0 
     // use la ruta correcta automáticamente para 'gemini-1.5-flash'.
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-001" });
 
     const filePart = fileToGenerativePart(file.path, file.mimetype);
     const prompt = `Analiza este documento y responde: ${pregunta || "Resumen"}`;
