@@ -2,25 +2,24 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Send, 
   FileText, 
-  Image as ImageIcon, 
-  Mic, 
-  FileSpreadsheet, 
-  Archive, 
-  Trash2, 
   UploadCloud, 
   Loader2, 
-  BookOpen,
-  Sparkles,
-  BrainCircuit,
-  MessageSquare,
-  X
+  BookOpen, 
+  Sparkles, 
+  BrainCircuit, 
+  X,
+  Image as ImageIcon,
+  Mic,
+  FileSpreadsheet,
+  Archive,
+  PlayCircle
 } from 'lucide-react';
 
 const App = () => {
   const [messages, setMessages] = useState([
     { 
       role: 'assistant', 
-      content: '¡Bienvenido a **SandBox AI**! 🚀\n\nHe conectado este panel con tu servidor de Render. Sube un PDF y hazme una pregunta para analizarlo en tiempo real.',
+      content: '¡Bienvenido a **SandBox AI Universal**! 🚀\n\nAhora puedes subir cualquier tipo de archivo: PDFs, Imágenes, Word, Excel o Audio. ¿En qué puedo ayudarte hoy?',
       type: 'text'
     }
   ]);
@@ -29,30 +28,24 @@ const App = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const chatEndRef = useRef(null);
 
-  const scrollToBottom = () => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
   useEffect(() => {
-    scrollToBottom();
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isProcessing]);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file && file.type === "application/pdf") {
-      setSelectedFile(file);
-    } else {
-      alert("Por favor, selecciona un archivo PDF.");
-    }
-  };
+  // Función para elegir el icono según el tipo de archivo
+  const getFileIcon = (file) => {
+    if (!file) return <FileText />;
+    const type = file.type;
+    const name = file.name.toLowerCase();
 
-  const removeFile = () => {
-    setSelectedFile(null);
-  };
-
-  const getFileIcon = (type) => {
-    if (type?.includes('pdf')) return <BookOpen className="text-red-500" />;
-    return <FileText className="text-slate-400" />;
+    if (type.includes('pdf')) return <BookOpen color="#ef4444" size={24} />;
+    if (type.includes('image')) return <ImageIcon color="#3b82f6" size={24} />;
+    if (type.includes('audio')) return <Mic color="#a855f7" size={24} />;
+    if (type.includes('video')) return <PlayCircle color="#f59e0b" size={24} />;
+    if (name.endsWith('.xlsx') || name.endsWith('.csv') || type.includes('spreadsheet')) return <FileSpreadsheet color="#22c55e" size={24} />;
+    if (type.includes('zip') || type.includes('compressed')) return <Archive color="#f97316" size={24} />;
+    
+    return <FileText color="#94a3b8" size={24} />;
   };
 
   const handleSubmit = async (e) => {
@@ -60,16 +53,12 @@ const App = () => {
     if (!input.trim() || !selectedFile) return;
 
     const userPrompt = input;
-    const currentFile = selectedFile;
-
-    // Añadir mensaje del usuario al chat
     setMessages(prev => [...prev, { role: 'user', content: userPrompt, type: 'text' }]);
     setInput('');
     setIsProcessing(true);
 
-    // Lógica real de conexión con el Backend de Render
     const formData = new FormData();
-    formData.append('archivo', currentFile);
+    formData.append('archivo', selectedFile);
     formData.append('pregunta', userPrompt);
 
     try {
@@ -77,175 +66,144 @@ const App = () => {
         method: 'POST',
         body: formData,
       });
-
       const data = await response.json();
-
-      if (data.error) {
-        setMessages(prev => [...prev, { 
-          role: 'assistant', 
-          content: `❌ Error del servidor: ${data.error}`, 
-          type: 'text' 
-        }]);
-      } else {
-        setMessages(prev => [...prev, { 
-          role: 'assistant', 
-          content: data.respuesta, 
-          type: 'text' 
-        }]);
-      }
+      setMessages(prev => [...prev, { role: 'assistant', content: data.respuesta || data.error, type: 'text' }]);
     } catch (error) {
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: "❌ Error de conexión: Asegúrate de que tu servidor en Render esté encendido.", 
-        type: 'text' 
-      }]);
-      console.error(error);
+      setMessages(prev => [...prev, { role: 'assistant', content: "❌ Error de conexión con Render. Asegúrate de que el servidor soporte este tipo de archivo.", type: 'text' }]);
     } finally {
       setIsProcessing(false);
     }
   };
 
   return (
-    <div className="flex h-screen bg-[#f1f5f9] text-slate-800 font-sans overflow-hidden">
-      {/* Sidebar - Biblioteca y Estado */}
-      <aside className="w-80 bg-white border-r border-slate-200 flex flex-col shadow-xl z-10">
-        <div className="p-6">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-lg shadow-indigo-200">
-              <BrainCircuit size={24} />
-            </div>
-            <h1 className="text-2xl font-black tracking-tighter text-slate-900">SandBox AI</h1>
+    <div style={s.container}>
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .spinner { animation: spin 1s linear infinite; }
+        body { margin: 0; background-color: #f1f5f9; }
+        * { box-sizing: border-box; }
+      `}</style>
+
+      {/* Sidebar */}
+      <aside style={s.sidebar}>
+        <div style={{padding: '24px'}}>
+          <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+            <div style={s.logoIcon}><BrainCircuit size={24} /></div>
+            <h1 style={s.logoText}>SandBox AI</h1>
           </div>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] ml-1">Live Backend Connection</p>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 pb-4">
-          <div className="mb-6">
-            {!selectedFile ? (
-              <label className="group relative flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-slate-200 rounded-2xl cursor-pointer bg-slate-50 hover:bg-indigo-50/30 hover:border-indigo-400 transition-all duration-300">
-                <div className="flex flex-col items-center justify-center text-center p-4">
-                  <UploadCloud className="w-10 h-10 text-slate-300 group-hover:text-indigo-500 transition-colors mb-2" />
-                  <p className="text-xs font-bold text-slate-600">Subir Documento</p>
-                  <p className="text-[10px] text-slate-400 mt-1 leading-tight">Haz clic para buscar tu PDF</p>
-                </div>
-                <input type="file" className="hidden" accept="application/pdf" onChange={handleFileChange} />
-              </label>
-            ) : (
-              <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl relative animate-in fade-in zoom-in-95">
-                <button 
-                  onClick={removeFile}
-                  className="absolute -top-2 -right-2 bg-white border border-slate-200 rounded-full p-1 text-slate-400 hover:text-red-500 shadow-sm"
-                >
-                  <X size={14} />
-                </button>
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white rounded-lg shadow-sm">
-                    <BookOpen className="text-red-500" size={20} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold truncate text-indigo-900">{selectedFile.name}</p>
-                    <p className="text-[9px] text-indigo-400 font-bold uppercase">Listo para analizar</p>
-                  </div>
-                </div>
+        <div style={{flex: 1, padding: '0 16px', overflowY: 'auto'}}>
+          {!selectedFile ? (
+            <label style={s.dropzone}>
+              <UploadCloud size={32} color="#94a3b8" />
+              <p style={{fontSize: '12px', fontWeight: 'bold', margin: '8px 0 0'}}>Ingresar Material</p>
+              <p style={{fontSize: '10px', color: '#94a3b8', marginTop: '4px'}}>PDF, IMG, DOCX, XLS, MP3...</p>
+              <input type="file" hidden onChange={(e) => setSelectedFile(e.target.files[0])} />
+            </label>
+          ) : (
+            <div style={s.fileCard}>
+              <button onClick={() => setSelectedFile(null)} style={s.removeBtn}><X size={14}/></button>
+              <div style={s.iconBg}>
+                {getFileIcon(selectedFile)}
               </div>
-            )}
-          </div>
-
-          <div className="space-y-4">
-            <div className="px-1">
-              <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Información del Sistema</span>
+              <div style={{minWidth: 0, flex: 1}}>
+                <p style={s.fileName}>{selectedFile.name}</p>
+                <p style={s.fileStatus}>Archivo Cargado</p>
+              </div>
             </div>
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-              <p className="text-[11px] text-slate-500 leading-relaxed">
-                Este panel envía tus archivos directamente a <strong>Render</strong> para procesamiento RAG con <strong>Gemini 1.5 Flash</strong>.
-              </p>
-            </div>
-          </div>
+          )}
         </div>
 
-        <div className="p-4 mt-auto border-t border-slate-50">
-          <div className="flex items-center gap-3 p-3 bg-slate-900 rounded-2xl text-white">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-400 to-purple-600 flex items-center justify-center text-sm font-black">RA</div>
-            <div className="overflow-hidden">
-              <p className="text-xs font-bold truncate">Rod Arena</p>
-              <p className="text-[10px] text-slate-400 font-medium">SandBox Developer</p>
+        <div style={s.sidebarFooter}>
+          <div style={s.userBadge}>
+            <div style={s.avatar}>RA</div>
+            <div>
+              <p style={{fontSize: '12px', fontWeight: 'bold', margin: 0}}>Rod Arena</p>
+              <p style={{fontSize: '10px', color: '#94a3b8', margin: 0}}>Universal Developer</p>
             </div>
           </div>
         </div>
       </aside>
 
-      {/* Main Interface */}
-      <main className="flex-1 flex flex-col relative min-w-0">
-        <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-8 sticky top-0 z-20">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-tighter">Conectado a sandboxai.onrender.com</span>
+      {/* Main Chat */}
+      <main style={s.chatContainer}>
+        <header style={s.chatHeader}>
+          <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+            <div style={s.statusDot}></div>
+            <span style={s.statusText}>Multimodal System Active</span>
           </div>
-          <Sparkles size={18} className="text-indigo-500" />
+          <Sparkles size={18} color="#6366f1" />
         </header>
 
-        {/* Chat Feed */}
-        <div className="flex-1 overflow-y-auto p-6 md:p-12 space-y-8">
-          <div className="max-w-4xl mx-auto space-y-8">
-            {messages.map((msg, idx) => (
-              <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] ${msg.role === 'user' ? 'items-end' : 'items-start'} flex flex-col gap-2`}>
-                  <div className={`p-5 rounded-3xl shadow-sm ${
-                    msg.role === 'user' 
-                    ? 'bg-indigo-600 text-white rounded-tr-none shadow-lg shadow-indigo-100' 
-                    : 'bg-white border border-slate-100 text-slate-800 rounded-tl-none'
-                  }`}>
-                    <div className="text-[15px] leading-relaxed whitespace-pre-wrap font-medium">
-                      {msg.content}
-                    </div>
-                  </div>
-                </div>
+        <div style={s.messagesArea}>
+          {messages.map((msg, i) => (
+            <div key={i} style={{display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', marginBottom: '20px'}}>
+              <div style={{
+                ...s.bubble,
+                backgroundColor: msg.role === 'user' ? '#6366f1' : '#fff',
+                color: msg.role === 'user' ? '#fff' : '#1e293b',
+                borderRadius: msg.role === 'user' ? '20px 20px 0 20px' : '20px 20px 20px 0',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+              }}>
+                {msg.content}
               </div>
-            ))}
-            
-            {isProcessing && (
-              <div className="flex justify-start animate-in fade-in">
-                <div className="bg-white border border-slate-100 p-5 rounded-3xl rounded-tl-none flex items-center gap-4 shadow-sm">
-                  <Loader2 className="animate-spin text-indigo-600" size={20} />
-                  <span className="text-sm text-slate-500 font-bold">SandBox AI analizando documento en Render...</span>
-                </div>
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
+            </div>
+          ))}
+          {isProcessing && (
+            <div style={{display: 'flex', gap: '10px', alignItems: 'center', color: '#64748b', fontSize: '14px'}}>
+              <Loader2 className="spinner" size={18} /> Procesando información multimodal...
+            </div>
+          )}
+          <div ref={chatEndRef} />
         </div>
 
-        {/* Input Area */}
-        <div className="p-6">
-          <div className="max-w-4xl mx-auto">
-            <form onSubmit={handleSubmit} className="relative group">
-              <div className="absolute inset-0 bg-indigo-500/10 rounded-3xl blur-xl group-focus-within:bg-indigo-500/20 transition-all"></div>
-              <div className="relative flex items-center bg-white border border-slate-200 rounded-3xl shadow-2xl p-2 pl-6 focus-within:border-indigo-400 transition-all">
-                <input
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder={selectedFile ? "Pregunta sobre el PDF..." : "Sube un archivo para comenzar..."}
-                  className="flex-1 bg-transparent border-none py-4 text-[15px] font-medium outline-none text-slate-700 placeholder:text-slate-300"
-                  disabled={isProcessing}
-                />
-                <button 
-                  type="submit"
-                  disabled={!input.trim() || !selectedFile || isProcessing}
-                  className="p-4 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 disabled:bg-slate-100 disabled:text-slate-300 transition-all flex items-center justify-center shadow-lg active:scale-95 ml-2"
-                >
-                  <Send size={20} />
-                </button>
-              </div>
-            </form>
-            <p className="text-center text-[10px] text-slate-400 mt-4 font-bold uppercase tracking-widest">
-              Powered by Google Gemini 1.5 Flash • RAG Engine
-            </p>
-          </div>
+        <div style={s.inputWrapper}>
+          <form onSubmit={handleSubmit} style={s.inputBox}>
+            <input 
+              style={s.input} 
+              placeholder={selectedFile ? "Pregunta sobre el archivo..." : "Sube cualquier archivo para comenzar"}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              disabled={!selectedFile}
+            />
+            <button type="submit" style={s.sendBtn} disabled={!input.trim() || isProcessing}>
+              <Send size={18} />
+            </button>
+          </form>
+          <p style={{textAlign: 'center', fontSize: '10px', color: '#94a3b8', marginTop: '10px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px'}}>
+            Análisis Universal • Gemini 1.5 Flash Engine
+          </p>
         </div>
       </main>
     </div>
   );
+};
+
+const s = {
+  container: { display: 'flex', height: '100vh', fontFamily: 'Inter, system-ui, sans-serif' },
+  sidebar: { width: '280px', backgroundColor: '#fff', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column' },
+  logoIcon: { backgroundColor: '#6366f1', padding: '8px', borderRadius: '10px', color: '#fff' },
+  logoText: { fontSize: '20px', fontWeight: '900', margin: 0, letterSpacing: '-0.5px' },
+  dropzone: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '140px', border: '2px dashed #e2e8f0', borderRadius: '16px', cursor: 'pointer', backgroundColor: '#f8fafc', textAlign: 'center', padding: '10px' },
+  fileCard: { display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', backgroundColor: '#f0f4ff', borderRadius: '16px', position: 'relative', border: '1px solid #dbeafe' },
+  iconBg: { backgroundColor: '#fff', padding: '8px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' },
+  fileName: { fontSize: '12px', fontWeight: 'bold', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  fileStatus: { fontSize: '10px', color: '#6366f1', fontWeight: 'bold', margin: 0, textTransform: 'uppercase' },
+  removeBtn: { position: 'absolute', top: '-8px', right: '-8px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '50%', padding: '4px', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' },
+  sidebarFooter: { padding: '20px', borderTop: '1px solid #f1f5f9' },
+  userBadge: { display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', backgroundColor: '#0f172a', borderRadius: '12px', color: '#fff' },
+  avatar: { width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' },
+  chatContainer: { flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' },
+  chatHeader: { height: '64px', backgroundColor: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 32px' },
+  statusDot: { width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#22c55e', boxShadow: '0 0 8px #22c55e' },
+  statusText: { fontSize: '11px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase' },
+  messagesArea: { flex: 1, padding: '40px', overflowY: 'auto' },
+  bubble: { maxWidth: '80%', padding: '16px 20px', fontSize: '15px', lineHeight: '1.5' },
+  inputWrapper: { padding: '24px 40px' },
+  inputBox: { display: 'flex', alignItems: 'center', backgroundColor: '#fff', borderRadius: '20px', padding: '8px 8px 8px 24px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' },
+  input: { flex: 1, border: 'none', outline: 'none', fontSize: '15px', padding: '10px 0' },
+  sendBtn: { backgroundColor: '#6366f1', color: '#fff', border: 'none', borderRadius: '14px', padding: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }
 };
 
 export default App;
