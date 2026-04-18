@@ -29,11 +29,15 @@ const findChromePath = () => {
     if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
     const paths = [
         '/usr/bin/google-chrome-stable',
+        // Ruta detectada en tu último log de Render
         '/opt/render/project/src/.cache/puppeteer/chrome/linux-147.0.7727.56/chrome-linux64/chrome',
         '/opt/render/.cache/puppeteer/chrome/linux-147.0.7727.56/chrome-linux64/chrome'
     ];
     for (const p of paths) {
-        if (fs.existsSync(p)) return p;
+        if (fs.existsSync(p)) {
+            console.log(`✅ Chrome encontrado en: ${p}`);
+            return p;
+        }
     }
     return undefined;
 };
@@ -74,10 +78,11 @@ client.on('ready', () => {
 
 // Función centralizada para procesar el clon
 const procesarClon = async (msg) => {
-    const body = msg.body.toLowerCase();
+    const body = msg.body.trim().toLowerCase();
     
     // Comando simple de testeo
     if (body === '!ping') {
+        console.log('Test !ping detectado');
         return msg.reply('¡Golazo! Estoy vivo y conectado.');
     }
 
@@ -120,10 +125,12 @@ client.on('message', async (msg) => {
     await procesarClon(msg);
 });
 
-// Escuchar mensajes creados por el propio bot (para que te respondas a vos mismo si querés)
+// Escuchar mensajes creados (incluyendo los tuyos)
 client.on('message_create', async (msg) => {
-    if (msg.fromMe && msg.body.toLowerCase().startsWith('!clon')) {
-        console.log(`Self-message detectado: ${msg.body}`);
+    const body = msg.body.toLowerCase();
+    // Permitimos que procese si viene de vos y es un comando conocido
+    if (msg.fromMe && (body === '!ping' || body.startsWith('!clon'))) {
+        console.log(`Self-message procesado: ${msg.body}`);
         await procesarClon(msg);
     }
 });
