@@ -4,6 +4,7 @@ const multer = require('multer');
 const cors = require('cors');
 const OpenAI = require('openai');
 const fs = require('fs');
+const path = require('path');
 const pdf = require('pdf-parse');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
@@ -21,7 +22,13 @@ const groq = new OpenAI({
 });
 
 // --- MOTOR WHATSAPP ---
-// Eliminamos la ruta hardcodeada para que Puppeteer busque el navegador instalado
+// Esta función busca el ejecutable de Chrome en las rutas de Render
+const getExecutablePath = () => {
+    const renderPath = '/opt/render/project/src/.cache/puppeteer/chrome/linux-131.0.6778.85/chrome-linux64/chrome';
+    if (fs.existsSync(renderPath)) return renderPath;
+    return '/usr/bin/google-chrome-stable'; // Fallback
+};
+
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
@@ -30,97 +37,87 @@ const client = new Client({
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
             '--disable-gpu'
         ],
-        // Si existe la variable de entorno la usa, si no, deja que puppeteer decida
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined 
+        executablePath: getExecutablePath()
     }
 });
 
+// Eventos de WhatsApp
 client.on('qr', (qr) => {
-    console.log('--- NUEVO CÓDIGO QR DETECTADO ---');
+    console.log('--- NUEVO CÓDIGO QR ---');
     qrcode.generate(qr, {small: true});
-    console.log('👉 Escaneá este código en WhatsApp > Dispositivos vinculados');
+    console.log('👉 Escaneá este código para activar el Clon de Rodrigo');
 });
 
 client.on('ready', () => {
-    console.log('✅ ¡WhatsApp Conectado y listo!');
+    console.log('✅ ¡WhatsApp Conectado! Tu clon está en línea.');
 });
 
-client.on('auth_failure', msg => {
-    console.error('❌ Error de autenticación:', msg);
-});
-
-// Lógica de respuesta (Modo Clon)
+// Lógica de respuesta del "Gemelo Digital"
 client.on('message', async (msg) => {
+    // Solo responde si el mensaje no es de un grupo o si mencionan !clon
     if (msg.body.startsWith('!clon')) {
         const userQuery = msg.body.replace('!clon', '').trim();
+        
         try {
-            const response = await groq.chat.completions.create({
+            const completion = await groq.chat.completions.create({
                 model: "llama-3.3-70b-versatile",
                 messages: [
                     { 
-                      role: "system", 
-                      content: "Sos Rodrigo Nahuel Narena. Respondé como él, usá expresiones como '¡Golazo!' o '¡Dale!'. Trabajás en rampa en Aerolíneas y sos programador." 
+                        role: "system", 
+                        content: `Sos Rodrigo Nahuel Narena. 35 años, de Morón. 
+                        Trabajás en rampa en Aerolíneas Argentinas. Sos programador autodidacta.
+                        Tu estilo: Argentino, directo, usa 'vos', 'dale', 'golazo'. 
+                        No sos formal. Respondé como si le hablaras a un amigo.` 
                     },
                     { role: "user", content: userQuery }
                 ]
             });
-            msg.reply(response.choices[0].message.content);
+            
+            msg.reply(completion.choices[0].message.content);
         } catch (err) {
             console.error('Error en el clon:', err.message);
         }
     }
 });
 
-// Inicializar el cliente de WhatsApp
-console.log('⏳ Iniciando motor de WhatsApp...');
-client.initialize().catch(err => {
-    console.error('❌ Fallo crítico al iniciar WhatsApp:', err.message);
-    console.log('💡 Tip: Revisa que el Build Command sea: npm install && npx puppeteer browsers install chrome');
-});
+client.initialize().catch(err => console.error('Error inicializando WhatsApp:', err));
 
-// --- RUTAS API ---
+// --- RUTAS DEL SERVIDOR ---
 app.get('/', (req, res) => {
-  res.send('🚀 Servidor Híbrido: PDF + WhatsApp funcionando');
+    res.send('🚀 Servidor Híbrido Activo: PDF + WhatsApp Clone');
 });
 
-// Ruta para analizar PDFs (RAG Lite)
+// Ruta para el analizador de documentos (Mantenemos lo anterior)
 app.post('/analizar', upload.single('archivo'), async (req, res) => {
-  try {
-    const { pregunta } = req.body;
-    const file = req.file;
+    try {
+        const { pregunta } = req.body;
+        const file = req.file;
+        if (!file) return res.status(400).json({ error: "No hay archivo" });
 
-    if (!file) return res.status(400).json({ error: "Archivo no recibido." });
+        let text = "";
+        if (file.mimetype === 'application/pdf') {
+            const data = await pdf(fs.readFileSync(file.path));
+            text = data.text.substring(0, 30000);
+        } else {
+            text = fs.readFileSync(file.path, 'utf8').substring(0, 30000);
+        }
 
-    let contenidoExtraido = "";
-    if (file.mimetype === 'application/pdf') {
-      const dataBuffer = fs.readFileSync(file.path);
-      const data = await pdf(dataBuffer);
-      contenidoExtraido = data.text.substring(0, 30000);
-    } else {
-      contenidoExtraido = fs.readFileSync(file.path, 'utf8').substring(0, 30000);
+        const response = await groq.chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            messages: [
+                { role: "system", content: "Analizador de documentos SandBox AI." },
+                { role: "user", content: `Doc: ${text}\nPregunta: ${pregunta}` }
+            ]
+        });
+
+        if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+        res.json({ respuesta: response.choices[0].message.content });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
-
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        { role: "system", content: "Eres SandBox AI Pro. Responde basándote en el documento." },
-        { role: "user", content: `DOC:\n${contenidoExtraido}\n\nPREGUNTA: ${pregunta}` }
-      ]
-    });
-
-    if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
-    res.json({ respuesta: completion.choices[0].message.content });
-  } catch (error) {
-    res.status(500).json({ error: "Error en el análisis", details: error.message });
-  }
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor activo en puerto ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Puerto ${PORT} abierto`));
