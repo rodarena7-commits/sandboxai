@@ -21,6 +21,7 @@ const groq = new OpenAI({
 });
 
 // --- MOTOR WHATSAPP ---
+// Eliminamos la ruta hardcodeada para que Puppeteer busque el navegador instalado
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
@@ -34,8 +35,8 @@ const client = new Client({
             '--no-zygote',
             '--disable-gpu'
         ],
-        // Busca el ejecutable de Chrome instalado por el build command
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable'
+        // Si existe la variable de entorno la usa, si no, deja que puppeteer decida
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined 
     }
 });
 
@@ -76,7 +77,11 @@ client.on('message', async (msg) => {
 });
 
 // Inicializar el cliente de WhatsApp
-client.initialize().catch(err => console.error('Fallo al iniciar WhatsApp:', err));
+console.log('⏳ Iniciando motor de WhatsApp...');
+client.initialize().catch(err => {
+    console.error('❌ Fallo crítico al iniciar WhatsApp:', err.message);
+    console.log('💡 Tip: Revisa que el Build Command sea: npm install && npx puppeteer browsers install chrome');
+});
 
 // --- RUTAS API ---
 app.get('/', (req, res) => {
