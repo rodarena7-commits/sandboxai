@@ -24,7 +24,7 @@ const groq = new OpenAI({
   baseURL: "https://api.groq.com/openai/v1",
 });
 
-// --- MOTOR WHATSAPP OPTIMIZADO PARA MEMORIA ---
+// --- MOTOR WHATSAPP OPTIMIZADO PARA RENDER ---
 const findChromePath = () => {
     if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
     const paths = [
@@ -65,32 +65,25 @@ client.on('qr', (qr) => {
     lastQR = qr; 
     console.log('--- NUEVO CÓDIGO QR GENERADO ---');
     qrcode.generate(qr, {small: true});
-    console.log('👉 Entrá a /qr en tu navegador para escanearlo sin deformaciones.');
 });
 
 client.on('ready', () => {
     lastQR = "CONECTADO"; 
-    console.log('✅ ¡WhatsApp Conectado! Tu Gemelo Digital está activo.');
+    console.log('✅ ¡WhatsApp Conectado! El clon de Rodri está escuchando...');
 });
 
-client.on('auth_failure', (msg) => {
-    console.error('❌ Error de autenticación:', msg);
-    lastQR = ""; // Forzamos regeneración si falla
-});
+// Función centralizada para procesar el clon
+const procesarClon = async (msg) => {
+    const body = msg.body.toLowerCase();
+    
+    // Comando simple de testeo
+    if (body === '!ping') {
+        return msg.reply('¡Golazo! Estoy vivo y conectado.');
+    }
 
-client.on('disconnected', (reason) => {
-    console.log('⚠️ WhatsApp se desconectó:', reason);
-    lastQR = "";
-    client.initialize(); // Intentamos reconectar
-});
-
-// --- LÓGICA DEL CLON (RODRIGO NAHUEL NARENA) ---
-client.on('message', async (msg) => {
-    // Log para ver si el bot recibe mensajes (debug)
-    console.log(`📩 Mensaje recibido de ${msg.from}: ${msg.body}`);
-
-    if (msg.body.startsWith('!clon')) {
-        const userQuery = msg.body.replace('!clon', '').trim();
+    if (body.startsWith('!clon')) {
+        console.log(`🤖 Procesando pedido de clon para: "${msg.body}"`);
+        const userQuery = msg.body.replace(/!clon/i, '').trim();
         
         try {
             const chat = await msg.getChat();
@@ -101,28 +94,37 @@ client.on('message', async (msg) => {
                 messages: [
                     { 
                         role: "system", 
-                        content: `Sos Rodrigo Nahuel Narena, tenés 35 años y vivís en Morón. 
-                        Trabajás en el sector de rampa en Aerolíneas Argentinas. Sos apasionado por la programación.
-                        
-                        ESTILO DE HABLA:
-                        - Hablás como un pibe de barrio, buena onda.
-                        - Usás el "voseo" argentino (che, vos, dale).
-                        - Muletillas: "¡Golazo!", "De una", "Posta", "Che".
-                        - Respondé como si le hablaras a un amigo, nada formal.
-                        - Si no sabés algo, tirá un "Ni idea che, dejame que lo vea".` 
+                        content: `Sos Rodrigo Nahuel Narena, de Morón. Trabajás en rampa en Aerolíneas Argentinas. 
+                        Sos programador Fullstack en formación. Estilo: Argentino de barrio, usás el voseo (vos, venís, hacés).
+                        Muletillas: "¡Golazo!", "De una", "Posta", "Che", "Dale". 
+                        Respondé breve, como un mensaje de texto real entre amigos. Nada de formalismos.` 
                     },
                     { role: "user", content: userQuery }
                 ]
             });
             
-            setTimeout(() => {
-                msg.reply(response.choices[0].message.content);
-                console.log('📤 Respuesta enviada con éxito');
-            }, 1000);
+            const aiText = response.choices[0].message.content;
+            await msg.reply(aiText);
+            console.log('📤 Respuesta del clon enviada con éxito.');
 
         } catch (err) {
             console.error('❌ Error en el motor de IA:', err.message);
+            msg.reply('Che, se me tildó el cerebro. Bancame un toque y volvé a probar.');
         }
+    }
+};
+
+// Escuchar mensajes nuevos de otros
+client.on('message', async (msg) => {
+    console.log(`📩 Mensaje de ${msg.from}: ${msg.body}`);
+    await procesarClon(msg);
+});
+
+// Escuchar mensajes creados por el propio bot (para que te respondas a vos mismo si querés)
+client.on('message_create', async (msg) => {
+    if (msg.fromMe && msg.body.toLowerCase().startsWith('!clon')) {
+        console.log(`Self-message detectado: ${msg.body}`);
+        await procesarClon(msg);
     }
 });
 
@@ -134,18 +136,17 @@ client.initialize().catch(err => {
 
 app.get('/qr', (req, res) => {
     if (!lastQR) {
-        res.send('<h1>Esperando el QR...</h1><p>El servidor se está iniciando. Recargá en 10 segundos.</p><script>setTimeout(()=>location.reload(), 10000)</script>');
+        res.send('<h1>Iniciando...</h1><script>setTimeout(()=>location.reload(), 5000)</script>');
     } else if (lastQR === "CONECTADO") {
-        res.send('<h1>✅ ¡WhatsApp ya está vinculado!</h1><p>Tu clon ya puede responder mensajes.</p>');
+        res.send('<h1>✅ ¡Conectado!</h1><p>Tu clon ya está activo.</p>');
     } else {
         res.send(`
             <html>
                 <body style="background: #111; color: white; text-align: center; padding-top: 50px; font-family: sans-serif;">
-                    <h1>Escaneá tu Clon de WhatsApp</h1>
+                    <h1>Escaneá tu Clon</h1>
                     <div style="background: white; display: inline-block; padding: 20px; border-radius: 10px;">
                         <img src="https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(lastQR)}&size=300x300" />
                     </div>
-                    <p style="margin-top: 20px; font-weight: bold; color: #aaa;">Usa WhatsApp > Dispositivos vinculados > Vincular dispositivo</p>
                     <script>setTimeout(() => location.reload(), 20000)</script>
                 </body>
             </html>
@@ -154,36 +155,29 @@ app.get('/qr', (req, res) => {
 });
 
 app.post('/analizar', upload.single('archivo'), async (req, res) => {
-  try {
-    const { pregunta } = req.body;
-    const file = req.file;
-    if (!file) return res.status(400).json({ error: "Archivo no recibido." });
-
-    let contenidoExtraido = "";
-    if (file.mimetype === 'application/pdf') {
-      const dataBuffer = fs.readFileSync(file.path);
-      const data = await pdf(dataBuffer);
-      contenidoExtraido = data.text.substring(0, 20000);
-    } else {
-      contenidoExtraido = fs.readFileSync(file.path, 'utf8').substring(0, 20000);
+    try {
+        const { pregunta } = req.body;
+        const file = req.file;
+        if (!file) return res.status(400).json({ error: "No hay archivo" });
+        let text = "";
+        if (file.mimetype === 'application/pdf') {
+            const data = await pdf(fs.readFileSync(file.path));
+            text = data.text.substring(0, 15000);
+        } else {
+            text = fs.readFileSync(file.path, 'utf8').substring(0, 15000);
+        }
+        const response = await groq.chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            messages: [{ role: "user", content: `Doc: ${text}\nPregunta: ${pregunta}` }]
+        });
+        if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+        res.json({ respuesta: response.choices[0].message.content });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
-
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        { role: "system", content: "Analizador SandBox AI Pro." },
-        { role: "user", content: `DOCUMENTO:\n${contenidoExtraido}\n\nPREGUNTA: ${pregunta}` }
-      ]
-    });
-
-    if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
-    res.json({ respuesta: completion.choices[0].message.content });
-  } catch (error) {
-    res.status(500).json({ error: "Error", details: error.message });
-  }
 });
 
-app.get('/', (req, res) => res.send('🚀 SandBox AI Híbrido: Clon de Rodri Activo'));
+app.get('/', (req, res) => res.send('🚀 SandBox AI Clon Rodri Online'));
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`🚀 Puerto ${PORT} abierto`));
+app.listen(PORT, () => console.log(`🚀 Puerto ${PORT} activo`));
