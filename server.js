@@ -6,7 +6,8 @@ const {
     default: makeWASocket, 
     useMultiFileAuthState, 
     DisconnectReason,
-    fetchLatestBaileysVersion
+    fetchLatestBaileysVersion,
+    makeCacheableSignalKeyStore
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
@@ -30,20 +31,28 @@ let adnPersonal = "Información no cargada. Usar estilo genérico de Rodrigo.";
 const adnPath = path.join(__dirname, 'mi_adn.txt');
 
 if (fs.existsSync(adnPath)) {
-    // Reducimos a 6.000 caracteres para estar totalmente seguros de no superar el límite TPM de Groq
     adnPersonal = fs.readFileSync(adnPath, 'utf8').substring(0, 6000);
     console.log(`🧠 ADN Personal cargado. Tamaño actual: ${adnPersonal.length} caracteres.`);
 }
 
 async function connectToWhatsApp() {
+    // Usamos una carpeta específica para la sesión
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
     const { version } = await fetchLatestBaileysVersion();
 
     sock = makeWASocket({
         version,
-        auth: state,
+        auth: {
+            creds: state.creds,
+            // Añadimos cache de llaves para evitar el error de Bad MAC
+            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
+        },
         logger: pino({ level: 'silent' }),
-        browser: ["Clon de Rodri", "Chrome", "1.0.0"]
+        browser: ["Clon de Rodri", "Chrome", "1.0.0"],
+        // Aumentamos los tiempos de espera para evitar desconexiones en Render
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 0,
+        keepAliveIntervalMs: 10000
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -54,11 +63,22 @@ async function connectToWhatsApp() {
             lastQR = qr; 
             qrcode.generate(qr, { small: true }); 
         }
+
         if (connection === 'close') {
-            if (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) connectToWhatsApp();
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+            
+            console.log(`⚠️ Conexión cerrada (Código: ${statusCode}). Reconectando: ${shouldReconnect}`);
+            
+            if (shouldReconnect) {
+                connectToWhatsApp();
+            } else {
+                console.log('❌ Sesión cerrada permanentemente. Por favor, borra la carpeta auth_info_baileys y re-escanea.');
+                lastQR = "";
+            }
         } else if (connection === 'open') {
             lastQR = "CONECTADO";
-            console.log('✅ Clon con ADN activo y en modo automático.');
+            console.log('✅ ¡WHATSAPP CONECTADO Y SINCRONIZADO!');
         }
     });
 
@@ -66,23 +86,30 @@ async function connectToWhatsApp() {
         if (type !== 'notify') return;
         const msg = messages[0];
         
+        // No responder si no hay mensaje, si es nuestro o si es un error de descifrado
         if (!msg.message || msg.key.fromMe) return;
 
         const from = msg.key.remoteJid;
-        const isGroup = from.endsWith('@g.us');
-        
-        if (isGroup) return;
+        if (from.endsWith('@g.us')) return; // Ignorar grupos
 
-        const text = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
+        // Extraer texto con validación por si el mensaje falla al descifrar (Bad MAC)
+        const text = msg.message.conversation || 
+                     msg.message.extendedTextMessage?.text || 
+                     msg.message.imageMessage?.caption || "";
+
+        if (!text) {
+            console.log('⚠️ Recibido mensaje vacío o sin descifrar (Bad MAC). Ignorando...');
+            return;
+        }
+
         const lowText = text.toLowerCase();
-
         if (lowText === '!ping') {
-            await sock.sendMessage(from, { text: '¡Golazo! El clon automático está online.' });
+            await sock.sendMessage(from, { text: '¡Golazo! El clon automático está online y estable.' });
             return;
         }
 
         try {
-            console.log(`🤖 Respondiendo automáticamente a: ${from}. Longitud ADN: ${adnPersonal.length}`);
+            console.log(`🤖 Respondiendo a: ${from}. Pregunta: "${text}"`);
             await sock.sendPresenceUpdate('composing', from);
 
             const response = await groq.chat.completions.create({
@@ -92,21 +119,19 @@ async function connectToWhatsApp() {
                         role: "system", 
                         content: `Sos el CLON DIGITAL de Rodrigo Nahuel Narena. 
                         
-                        CONTEXTO DE TU VIDA (ADN optimizado):
+                        CONTEXTO DE TU VIDA (ADN):
                         ${adnPersonal}
                         
                         REGLAS DE ORO:
-                        1. Sos Rodrigo, pero SIEMPRE debés incluir una breve aclaración (ej: "[Clon de Rodri]") para que la persona sepa que no es el humano real.
-                        2. No sos un asistente. Sos Rodri chateando: usá voseo, che, dale, abreviaturas de WhatsApp.
-                        3. Si alguien te pregunta algo muy personal que no está en tu ADN, decí que esperen a que el Rodri real conteste.
-                        4. Sé breve. Respuestas de chat, no testamentos.` 
+                        1. Sos Rodrigo. SIEMPRE aclaré al final "[Clon de Rodri]".
+                        2. Usá voseo, che, dale. Nada de formalismos.
+                        3. Sé breve y directo. Como un chat real.` 
                     },
                     { role: "user", content: text }
                 ]
             });
 
             let aiResponse = response.choices[0].message.content;
-            
             if (!aiResponse.includes('Clon')) {
                 aiResponse = `${aiResponse}\n\n*(Respuesta del Clon de Rodri)*`;
             }
@@ -114,10 +139,7 @@ async function connectToWhatsApp() {
             await sock.sendMessage(from, { text: aiResponse });
 
         } catch (err) {
-            console.error('Error Groq:', err.message);
-            if (err.message.includes('413')) {
-                console.log('⚠️ Error 413: Demasiados tokens. Verificá que el archivo server.js en Render tenga el límite de substring(0, 6000).');
-            }
+            console.error('❌ Error Groq:', err.message);
         }
     });
 }
@@ -126,8 +148,17 @@ connectToWhatsApp();
 
 app.get('/qr', (req, res) => {
     if (lastQR === "CONECTADO") return res.send('<h1>✅ Clon Automático Activo</h1>');
-    res.send(`<div style="text-align:center"><h2>Escaneá el código</h2><img src="https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(lastQR)}&size=300x300" /></div>`);
+    if (!lastQR) return res.send('<h1>Iniciando...</h1><p>Recargá en 10 segundos.</p>');
+    res.send(`
+        <div style="text-align:center; padding:50px; font-family:sans-serif;">
+            <h2>Vincular Clon de Rodrigo</h2>
+            <img src="https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(lastQR)}&size=300x300" />
+            <p>Escaneá desde WhatsApp > Dispositivos Vinculados</p>
+        </div>
+    `);
 });
 
+app.get('/', (req, res) => res.send('🚀 Motor Baileys estable con ADN'));
+
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`🚀 Motor automático en puerto ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Puerto ${PORT} activo`));
