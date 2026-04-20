@@ -30,8 +30,9 @@ let adnPersonal = "Información no cargada. Usar estilo genérico de Rodrigo.";
 const adnPath = path.join(__dirname, 'mi_adn.txt');
 
 if (fs.existsSync(adnPath)) {
-    adnPersonal = fs.readFileSync(adnPath, 'utf8').substring(0, 100000);
-    console.log('🧠 ADN Personal cargado correctamente.');
+    // Reducimos a 8.000 caracteres para no superar el límite de TPM (Tokens Per Minute) de Groq
+    adnPersonal = fs.readFileSync(adnPath, 'utf8').substring(0, 8000);
+    console.log('🧠 ADN Personal cargado (fragmento optimizado para API).');
 }
 
 async function connectToWhatsApp() {
@@ -41,16 +42,19 @@ async function connectToWhatsApp() {
     sock = makeWASocket({
         version,
         auth: state,
-        printQRInTerminal: true,
         logger: pino({ level: 'silent' }),
         browser: ["Clon de Rodri", "Chrome", "1.0.0"]
+        // Se eliminó printQRInTerminal porque está deprecated
     });
 
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
-        if (qr) { lastQR = qr; qrcode.generate(qr, { small: true }); }
+        if (qr) { 
+            lastQR = qr; 
+            qrcode.generate(qr, { small: true }); 
+        }
         if (connection === 'close') {
             if (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) connectToWhatsApp();
         } else if (connection === 'open') {
@@ -63,25 +67,21 @@ async function connectToWhatsApp() {
         if (type !== 'notify') return;
         const msg = messages[0];
         
-        // No responder a mensajes propios ni a mensajes sin texto
         if (!msg.message || msg.key.fromMe) return;
 
         const from = msg.key.remoteJid;
         const isGroup = from.endsWith('@g.us');
         
-        // CONFIGURACIÓN: Responder solo a chats individuales (no grupos) para evitar spam
         if (isGroup) return;
 
         const text = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
         const lowText = text.toLowerCase();
 
-        // Comando de testeo oculto
         if (lowText === '!ping') {
             await sock.sendMessage(from, { text: '¡Golazo! El clon automático está online.' });
             return;
         }
 
-        // --- RESPUESTA AUTOMÁTICA DEL CLON ---
         try {
             console.log(`🤖 Respondiendo automáticamente a: ${from}`);
             await sock.sendPresenceUpdate('composing', from);
@@ -93,14 +93,14 @@ async function connectToWhatsApp() {
                         role: "system", 
                         content: `Sos el CLON DIGITAL de Rodrigo Nahuel Narena. 
                         
-                        CONTEXTO DE TU VIDA (ADN):
+                        CONTEXTO DE TU VIDA (ADN limitado por API):
                         ${adnPersonal}
                         
                         REGLAS DE ORO:
-                        1. Sos Rodrigo, pero SIEMPRE debés incluir una breve aclaración al final o al principio del mensaje (ej: "[Clon de Rodri]") para que la persona sepa que no es el humano real.
+                        1. Sos Rodrigo, pero SIEMPRE debés incluir una breve aclaración (ej: "[Clon de Rodri]") para que la persona sepa que no es el humano real.
                         2. No sos un asistente. Sos Rodri chateando: usá voseo, che, dale, abreviaturas de WhatsApp.
-                        3. Si alguien te pregunta algo muy personal o que no está en tu ADN, decí que "esperen a que el Rodri real se libere y te conteste bien".
-                        4. Sé breve. Nadie manda testamentos por WhatsApp.` 
+                        3. Si alguien te pregunta algo muy personal que no está en tu ADN, decí que esperen a que el Rodri real conteste.
+                        4. Sé breve. Respuestas de chat, no testamentos.` 
                     },
                     { role: "user", content: text }
                 ]
@@ -108,7 +108,6 @@ async function connectToWhatsApp() {
 
             let aiResponse = response.choices[0].message.content;
             
-            // Asegurarnos de que la aclaración esté presente si la IA se olvida
             if (!aiResponse.includes('Clon')) {
                 aiResponse = `${aiResponse}\n\n*(Respuesta del Clon de Rodri)*`;
             }
@@ -117,6 +116,10 @@ async function connectToWhatsApp() {
 
         } catch (err) {
             console.error('Error Groq:', err.message);
+            // Mensaje de error amigable si la API vuelve a fallar
+            if (err.message.includes('413')) {
+                console.log('⚠️ El ADN sigue siendo muy grande para este mensaje específico.');
+            }
         }
     });
 }
@@ -125,7 +128,7 @@ connectToWhatsApp();
 
 app.get('/qr', (req, res) => {
     if (lastQR === "CONECTADO") return res.send('<h1>✅ Clon Automático Activo</h1>');
-    res.send(`<div style="text-align:center"><h2>Escaneá el nuevo motor</h2><img src="https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(lastQR)}&size=300x300" /></div>`);
+    res.send(`<div style="text-align:center"><h2>Escaneá el código</h2><img src="https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(lastQR)}&size=300x300" /></div>`);
 });
 
 const PORT = process.env.PORT || 10000;
