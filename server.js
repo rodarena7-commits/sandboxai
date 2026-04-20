@@ -30,9 +30,9 @@ let adnPersonal = "Información no cargada. Usar estilo genérico de Rodrigo.";
 const adnPath = path.join(__dirname, 'mi_adn.txt');
 
 if (fs.existsSync(adnPath)) {
-    // Reducimos a 8.000 caracteres para no superar el límite de TPM (Tokens Per Minute) de Groq
-    adnPersonal = fs.readFileSync(adnPath, 'utf8').substring(0, 8000);
-    console.log('🧠 ADN Personal cargado (fragmento optimizado para API).');
+    // Reducimos a 6.000 caracteres para estar totalmente seguros de no superar el límite TPM de Groq
+    adnPersonal = fs.readFileSync(adnPath, 'utf8').substring(0, 6000);
+    console.log(`🧠 ADN Personal cargado. Tamaño actual: ${adnPersonal.length} caracteres.`);
 }
 
 async function connectToWhatsApp() {
@@ -44,7 +44,6 @@ async function connectToWhatsApp() {
         auth: state,
         logger: pino({ level: 'silent' }),
         browser: ["Clon de Rodri", "Chrome", "1.0.0"]
-        // Se eliminó printQRInTerminal porque está deprecated
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -83,7 +82,7 @@ async function connectToWhatsApp() {
         }
 
         try {
-            console.log(`🤖 Respondiendo automáticamente a: ${from}`);
+            console.log(`🤖 Respondiendo automáticamente a: ${from}. Longitud ADN: ${adnPersonal.length}`);
             await sock.sendPresenceUpdate('composing', from);
 
             const response = await groq.chat.completions.create({
@@ -93,7 +92,7 @@ async function connectToWhatsApp() {
                         role: "system", 
                         content: `Sos el CLON DIGITAL de Rodrigo Nahuel Narena. 
                         
-                        CONTEXTO DE TU VIDA (ADN limitado por API):
+                        CONTEXTO DE TU VIDA (ADN optimizado):
                         ${adnPersonal}
                         
                         REGLAS DE ORO:
@@ -116,9 +115,8 @@ async function connectToWhatsApp() {
 
         } catch (err) {
             console.error('Error Groq:', err.message);
-            // Mensaje de error amigable si la API vuelve a fallar
             if (err.message.includes('413')) {
-                console.log('⚠️ El ADN sigue siendo muy grande para este mensaje específico.');
+                console.log('⚠️ Error 413: Demasiados tokens. Verificá que el archivo server.js en Render tenga el límite de substring(0, 6000).');
             }
         }
     });
