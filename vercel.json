@@ -1,0 +1,20 @@
+{
+  "rewrites": [
+    {
+      "source": "/analizar",
+      "destination": "https://sandboxai.onrender.com/analizar"
+    },
+    {
+      "source": "/qr",
+      "destination": "https://sandboxai.onrender.com/qr"
+    },
+    {
+      "source": "/estado",
+      "destination": "https://sandboxai.onrender.com/estado"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
