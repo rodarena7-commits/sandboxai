@@ -40,18 +40,27 @@ const LETRAS_FOLDER_ID = process.env.DRIVE_FOLDER_ID || '';
 function initializeDrive() {
     try {
         let serviceAccount = {};
-        const credString = process.env.GOOGLE_SERVICE_ACCOUNT || '';
+        let credString = (process.env.GOOGLE_SERVICE_ACCOUNT || '').trim();
+
+        if (!credString) {
+            console.warn('⚠️ GOOGLE_SERVICE_ACCOUNT no configurado');
+            return;
+        }
 
         if (credString.startsWith('{')) {
             // JSON directo
             serviceAccount = JSON.parse(credString);
-        } else if (credString) {
-            // Base64 encoded
-            serviceAccount = JSON.parse(Buffer.from(credString, 'base64').toString('utf8'));
+            console.log('✅ Service account cargado como JSON directo');
+        } else {
+            // Base64 encoded - limpiar espacios/saltos de línea
+            credString = credString.replace(/\s/g, '');
+            const decoded = Buffer.from(credString, 'base64').toString('utf8');
+            serviceAccount = JSON.parse(decoded);
+            console.log('✅ Service account decodificado desde Base64');
         }
 
         if (!serviceAccount.client_email) {
-            console.warn('⚠️ GOOGLE_SERVICE_ACCOUNT no configurado correctamente');
+            console.error('❌ Service account inválido: no contiene client_email');
             return;
         }
 
@@ -60,9 +69,10 @@ function initializeDrive() {
             scopes: ['https://www.googleapis.com/auth/drive.readonly'],
         });
         driveClient = google.drive({ version: 'v3', auth });
-        console.log('✅ Google Drive inicializado');
+        console.log(`✅ Google Drive inicializado para: ${serviceAccount.client_email}`);
     } catch (err) {
         console.error('❌ Error iniciando Drive:', err.message);
+        console.error('   Detalles:', err.stack);
     }
 }
 
