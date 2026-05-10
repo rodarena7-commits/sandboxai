@@ -87,14 +87,24 @@ lastQR = cargarQRGuardado() || "";
 async function listarLetrasEnDrive(folderId = LETRAS_FOLDER_ID, archivos = []) {
     if (!driveClient) return [];
     try {
-        // Listar archivos en esta carpeta
-        const resFiles = await driveClient.files.list({
+        // Listar Google Docs en esta carpeta
+        const resGoogleDocs = await driveClient.files.list({
             q: `'${folderId}' in parents and mimeType='application/vnd.google-apps.document' and trashed=false`,
             fields: 'files(id, name)',
             pageSize: 100,
         });
-        if (resFiles.data.files) {
-            archivos.push(...resFiles.data.files);
+        if (resGoogleDocs.data.files) {
+            archivos.push(...resGoogleDocs.data.files);
+        }
+
+        // Listar PDFs en esta carpeta
+        const resPDFs = await driveClient.files.list({
+            q: `'${folderId}' in parents and mimeType='application/pdf' and trashed=false`,
+            fields: 'files(id, name)',
+            pageSize: 100,
+        });
+        if (resPDFs.data.files) {
+            archivos.push(...resPDFs.data.files);
         }
 
         // Listar subcarpetas y buscar recursivamente
@@ -117,16 +127,31 @@ async function listarLetrasEnDrive(folderId = LETRAS_FOLDER_ID, archivos = []) {
     }
 }
 
-async function leerContenidoDoc(fileId) {
+async function leerContenidoDoc(fileId, mimeType = 'application/vnd.google-apps.document') {
     if (!driveClient) return "";
     try {
-        const res = await driveClient.files.export({
-            fileId,
-            mimeType: 'text/plain',
-        });
-        return String(res.data).substring(0, 1500);
+        let texto = "";
+
+        if (mimeType === 'application/pdf') {
+            // Descargar PDF y extraer texto
+            const resDownload = await driveClient.files.get({
+                fileId,
+                alt: 'media',
+            });
+            const pdfData = await pdfParse(resDownload.data);
+            texto = pdfData.text;
+        } else {
+            // Google Doc - exportar como texto plano
+            const resExport = await driveClient.files.export({
+                fileId,
+                mimeType: 'text/plain',
+            });
+            texto = String(resExport.data);
+        }
+
+        return texto.substring(0, 1500);
     } catch (err) {
-        console.error(`❌ Error leyendo doc ${fileId}:`, err.message);
+        console.error(`❌ Error leyendo archivo ${fileId}:`, err.message);
         return "";
     }
 }
@@ -138,12 +163,15 @@ async function obtenerCancionesParaSermon(tituloSermon) {
     if (archivos.length === 0) {
         return "No encontré archivos de letras en el Drive. Verificá el DRIVE_FOLDER_ID.";
     }
-    console.log(`📂 Encontré ${archivos.length} canciones en Drive.`);
+    console.log(`📂 Encontré ${archivos.length} archivos en Drive.`);
 
     const archivosALeer = archivos.slice(0, 50);
     const contenidos = await Promise.all(
         archivosALeer.map(async (archivo) => {
-            const texto = await leerContenidoDoc(archivo.id);
+            // Detectar tipo de archivo por extensión o mimeType
+            const esGoogleDoc = !archivo.name.toLowerCase().endsWith('.pdf');
+            const mimeType = esGoogleDoc ? 'application/vnd.google-apps.document' : 'application/pdf';
+            const texto = await leerContenidoDoc(archivo.id, mimeType);
             return { nombre: archivo.name, letra: texto };
         })
     );
