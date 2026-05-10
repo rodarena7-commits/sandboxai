@@ -39,6 +39,8 @@ const LETRAS_FOLDER_ID = process.env.DRIVE_FOLDER_ID || '';
 
 function initializeDrive() {
     try {
+        console.log(`⏰ Hora actual en servidor: ${new Date().toISOString()}`);
+
         let serviceAccount = {};
         const serviceAccountPath = path.join(__dirname, 'service-account.json');
 
