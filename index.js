@@ -100,8 +100,13 @@ lastQR = cargarQRGuardado() || "";
 // --- FUNCIONES DE DRIVE Y GROQ ---
 
 async function listarLetrasEnDrive(folderId = LETRAS_FOLDER_ID, archivos = []) {
-    if (!driveClient) return [];
+    if (!driveClient) {
+        console.error('❌ driveClient no inicializado');
+        return [];
+    }
     try {
+        console.log(`📂 Listando archivos en carpeta: ${folderId}`);
+
         // Listar Google Docs en esta carpeta
         const resGoogleDocs = await driveClient.files.list({
             q: `'${folderId}' in parents and mimeType='application/vnd.google-apps.document' and trashed=false`,
@@ -109,6 +114,7 @@ async function listarLetrasEnDrive(folderId = LETRAS_FOLDER_ID, archivos = []) {
             pageSize: 100,
         });
         if (resGoogleDocs.data.files) {
+            console.log(`   ✅ Encontré ${resGoogleDocs.data.files.length} Google Docs`);
             archivos.push(...resGoogleDocs.data.files);
         }
 
@@ -119,6 +125,7 @@ async function listarLetrasEnDrive(folderId = LETRAS_FOLDER_ID, archivos = []) {
             pageSize: 100,
         });
         if (resPDFs.data.files) {
+            console.log(`   ✅ Encontré ${resPDFs.data.files.length} PDFs`);
             archivos.push(...resPDFs.data.files);
         }
 
@@ -130,6 +137,7 @@ async function listarLetrasEnDrive(folderId = LETRAS_FOLDER_ID, archivos = []) {
         });
 
         if (resFolders.data.files && resFolders.data.files.length > 0) {
+            console.log(`   📁 Encontré ${resFolders.data.files.length} subcarpetas`);
             for (const carpeta of resFolders.data.files) {
                 await listarLetrasEnDrive(carpeta.id, archivos);
             }
@@ -138,6 +146,8 @@ async function listarLetrasEnDrive(folderId = LETRAS_FOLDER_ID, archivos = []) {
         return archivos;
     } catch (err) {
         console.error('❌ Error listando Drive:', err.message);
+        console.error('   Code:', err.code);
+        console.error('   Detalles:', err);
         return [];
     }
 }
