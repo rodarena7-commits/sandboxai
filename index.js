@@ -40,23 +40,29 @@ const LETRAS_FOLDER_ID = process.env.DRIVE_FOLDER_ID || '';
 function initializeDrive() {
     try {
         let serviceAccount = {};
-        let credString = (process.env.GOOGLE_SERVICE_ACCOUNT || '').trim();
+        const serviceAccountPath = path.join(__dirname, 'service-account.json');
 
-        if (!credString) {
-            console.warn('⚠️ GOOGLE_SERVICE_ACCOUNT no configurado');
-            return;
-        }
-
-        if (credString.startsWith('{')) {
-            // JSON directo
-            serviceAccount = JSON.parse(credString);
-            console.log('✅ Service account cargado como JSON directo');
+        // Intentar leer del archivo primero
+        if (fs.existsSync(serviceAccountPath)) {
+            serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+            console.log('✅ Service account cargado desde archivo');
         } else {
-            // Base64 encoded - limpiar espacios/saltos de línea
-            credString = credString.replace(/\s/g, '');
-            const decoded = Buffer.from(credString, 'base64').toString('utf8');
-            serviceAccount = JSON.parse(decoded);
-            console.log('✅ Service account decodificado desde Base64');
+            // Si no existe el archivo, intentar desde variable de entorno
+            const credString = (process.env.GOOGLE_SERVICE_ACCOUNT || '').trim();
+            if (!credString) {
+                console.warn('⚠️ No encontré service-account.json ni GOOGLE_SERVICE_ACCOUNT configurado');
+                return;
+            }
+
+            if (credString.startsWith('{')) {
+                serviceAccount = JSON.parse(credString);
+                console.log('✅ Service account cargado desde variable de entorno (JSON)');
+            } else {
+                credString = credString.replace(/\s/g, '');
+                const decoded = Buffer.from(credString, 'base64').toString('utf8');
+                serviceAccount = JSON.parse(decoded);
+                console.log('✅ Service account cargado desde variable de entorno (Base64)');
+            }
         }
 
         if (!serviceAccount.client_email) {
@@ -72,7 +78,6 @@ function initializeDrive() {
         console.log(`✅ Google Drive inicializado para: ${serviceAccount.client_email}`);
     } catch (err) {
         console.error('❌ Error iniciando Drive:', err.message);
-        console.error('   Detalles:', err.stack);
     }
 }
 
