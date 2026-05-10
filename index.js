@@ -30,7 +30,22 @@ const groq = new OpenAI({
 });
 
 // --- FIREBASE ADMIN ---
-const firebaseServiceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
+let firebaseServiceAccount = {};
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  try {
+    // Si comienza con { es JSON directo, sino es Base64
+    if (process.env.FIREBASE_SERVICE_ACCOUNT.trim().startsWith('{')) {
+      firebaseServiceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    } else {
+      // Decodificar desde Base64
+      const decoded = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT, 'base64').toString('utf-8');
+      firebaseServiceAccount = JSON.parse(decoded);
+    }
+  } catch (err) {
+    console.error('❌ Error parsando FIREBASE_SERVICE_ACCOUNT:', err.message);
+  }
+}
+
 admin.initializeApp({
   credential: admin.credential.cert(firebaseServiceAccount),
 });
