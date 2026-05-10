@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 const {
     default: makeWASocket,
     useMultiFileAuthState,
@@ -15,8 +17,26 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const QR_FILE = path.join(__dirname, 'qr_permanente.txt');
+
 let lastQR = "";
 let sock;
+let isConnected = false;
+
+// Cargar QR guardado si existe
+function cargarQRGuardado() {
+    if (fs.existsSync(QR_FILE)) {
+        return fs.readFileSync(QR_FILE, 'utf8').trim();
+    }
+    return null;
+}
+
+// Guardar QR en archivo
+function guardarQR(qr) {
+    fs.writeFileSync(QR_FILE, qr, 'utf8');
+}
+
+lastQR = cargarQRGuardado() || "";
 
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
@@ -41,16 +61,21 @@ async function connectToWhatsApp() {
         const { connection, lastDisconnect, qr } = update;
         if (qr) {
             lastQR = qr;
+            guardarQR(qr);
             qrcode.generate(qr, { small: true });
         }
         if (connection === 'close') {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
             console.log(`⚠️ Conexión cerrada (Código: ${statusCode}). Reconectando: ${shouldReconnect}`);
+            isConnected = false;
             if (shouldReconnect) connectToWhatsApp();
-            else { lastQR = ""; }
+            else {
+                lastQR = "";
+                if (fs.existsSync(QR_FILE)) fs.unlinkSync(QR_FILE);
+            }
         } else if (connection === 'open') {
-            lastQR = "CONECTADO";
+            isConnected = true;
             console.log('✅ WHATSAPP CONECTADO!');
         }
     });
@@ -85,11 +110,12 @@ connectToWhatsApp();
 // --- ENDPOINTS ---
 
 app.get('/qr', (req, res) => {
-    if (lastQR === "CONECTADO") return res.send('<h1>✅ Roberto está conectado</h1>');
+    if (isConnected) return res.send('<h1>✅ Roberto está conectado</h1>');
     if (!lastQR) return res.send('<h1>⏳ Iniciando...</h1><p>Recarga en 10 segundos.</p>');
     res.send(`
         <div style="text-align:center; padding:50px; font-family:sans-serif;">
             <h2>Vincular Roberto</h2>
+            <p style="color:#999; font-size:0.9rem;">QR permanente - No cambia</p>
             <img src="https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(lastQR)}&size=300x300" />
             <p>Escanea desde WhatsApp > Dispositivos Vinculados</p>
         </div>
