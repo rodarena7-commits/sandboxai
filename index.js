@@ -39,7 +39,22 @@ const LETRAS_FOLDER_ID = process.env.DRIVE_FOLDER_ID || '';
 
 function initializeDrive() {
     try {
-        const serviceAccount = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT || '{}');
+        let serviceAccount = {};
+        const credString = process.env.GOOGLE_SERVICE_ACCOUNT || '';
+
+        if (credString.startsWith('{')) {
+            // JSON directo
+            serviceAccount = JSON.parse(credString);
+        } else if (credString) {
+            // Base64 encoded
+            serviceAccount = JSON.parse(Buffer.from(credString, 'base64').toString('utf8'));
+        }
+
+        if (!serviceAccount.client_email) {
+            console.warn('⚠️ GOOGLE_SERVICE_ACCOUNT no configurado correctamente');
+            return;
+        }
+
         const auth = new google.auth.GoogleAuth({
             credentials: serviceAccount,
             scopes: ['https://www.googleapis.com/auth/drive.readonly'],
