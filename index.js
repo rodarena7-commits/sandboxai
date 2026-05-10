@@ -23,6 +23,12 @@ app.use(express.json());
 let lastQR = "";
 let sock;
 
+// --- USUARIOS PARA DEVOCIONAL Y EVENTOS ---
+const USUARIOS_DEVOCIONAL = [
+  { nombre: 'Rodrigo', jid: '5491158660344@s.whatsapp.net' },
+  { nombre: 'Gabo',    jid: '541122831781@s.whatsapp.net'  },
+];
+
 // --- GROQ CLIENT ---
 const groq = new OpenAI({
   apiKey: process.env.GROQ_API_KEY,
@@ -224,6 +230,142 @@ async function esUnPedidoDeCanciones(texto) {
     }
 }
 
+// --- DEVOCIONAL DIARIO Y CALENDARIO ---
+
+async function generarDevocional() {
+    try {
+        const res = await groq.chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            max_tokens: 500,
+            messages: [
+                {
+                    role: "system",
+                    content: `Eres un pastor cristiano que genera devocionales diarios breves.`
+                },
+                {
+                    role: "user",
+                    content: `Genera un devocional cristiano breve para hoy con:
+1. Un versículo bíblico (en formato: Libro X:Y)
+2. El texto del versículo
+3. Una reflexión corta (2-3 líneas) sobre su significado para la vida
+4. Una oración breve
+
+Formato simple y directo para WhatsApp.`
+                }
+            ]
+        });
+        return res.choices[0].message.content;
+    } catch (err) {
+        console.error('❌ Error generando devocional:', err.message);
+        return "📖 Devocional del día: Que Dios te bendiga";
+    }
+}
+
+async function enviarDevocionalDiario() {
+    try {
+        const hoy = new Date().toISOString().split('T')[0];
+        const snapshot = await db.collection('devocionales').doc(hoy).get();
+
+        if (snapshot.exists) {
+            console.log(`✅ Devocional de ${hoy} ya enviado`);
+            return;
+        }
+
+        const devocional = await generarDevocional();
+
+        for (const usuario of USUARIOS_DEVOCIONAL) {
+            try {
+                await sock.sendMessage(usuario.jid, { text: `📖 Devocional del día (${usuario.nombre}):\n\n${devocional}` });
+                console.log(`✅ Devocional enviado a ${usuario.nombre}`);
+            } catch (err) {
+                console.error(`❌ Error enviando a ${usuario.nombre}:`, err.message);
+            }
+        }
+
+        await db.collection('devocionales').doc(hoy).set({
+            fecha: admin.firestore.FieldValue.serverTimestamp(),
+            contenido: devocional
+        });
+    } catch (err) {
+        console.error('❌ Error en enviarDevocionalDiario:', err.message);
+    }
+}
+
+async function verificarEventos() {
+    try {
+        const ahora = new Date();
+        const eventosSnapshot = await db.collection('eventos').where('notificadoHora', '==', false).get();
+
+        for (const doc of eventosSnapshot.docs) {
+            const evento = doc.data();
+            const fechaEvento = new Date(evento.fechaISO);
+            const diferenciaMs = fechaEvento - ahora;
+            const diferenciaMin = Math.round(diferenciaMs / (1000 * 60));
+
+            if (diferenciaMin <= 60 && diferenciaMin > 0) {
+                for (const usuario of USUARIOS_DEVOCIONAL) {
+                    try {
+                        await sock.sendMessage(usuario.jid, {
+                            text: `⏰ En ${diferenciaMin} minuto${diferenciaMin !== 1 ? 's' : ''}: ${evento.titulo}`
+                        });
+                    } catch (err) {
+                        console.error(`Error notificando a ${usuario.nombre}:`, err.message);
+                    }
+                }
+                await db.collection('eventos').doc(doc.id).update({ notificadoHora: true });
+            }
+        }
+    } catch (err) {
+        console.error('❌ Error en verificarEventos:', err.message);
+    }
+}
+
+async function agendarEvento(texto, autorNombre) {
+    try {
+        const res = await groq.chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            max_tokens: 300,
+            messages: [
+                {
+                    role: "system",
+                    content: `Extrae información de un evento en formato JSON. Responde SOLO con el JSON, sin más texto.
+{
+  "titulo": "nombre del evento",
+  "descripcion": "descripción breve",
+  "fechaISO": "2026-05-20T19:00:00-03:00"
+}`
+                },
+                {
+                    role: "user",
+                    content: `Extrae el evento de: "${texto}"`
+                }
+            ]
+        });
+
+        const jsonStr = res.choices[0].message.content.trim();
+        const eventoData = JSON.parse(jsonStr);
+
+        const docRef = await db.collection('eventos').add({
+            titulo: eventoData.titulo,
+            descripcion: eventoData.descripcion || '',
+            fechaISO: eventoData.fechaISO,
+            creadoPor: autorNombre,
+            notificadoDia: false,
+            notificadoHora: false,
+            fechaCreacion: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        const fecha = new Date(eventoData.fechaISO);
+        const fechaFormato = fecha.toLocaleDateString('es-AR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        const horaFormato = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
+        return `✅ Evento agendado:\n📅 ${eventoData.titulo}\n📍 ${fechaFormato} a las ${horaFormato}\n\nTe notificaré 1 hora antes.`;
+    } catch (err) {
+        console.error('❌ Error agendando evento:', err.message);
+        return '❌ Error al agendar el evento. Intenta de nuevo con este formato: "agenda: Evento el 20/05 a las 19:00"';
+    }
+}
+
 // --- WHATSAPP ---
 
 async function connectToWhatsApp() {
@@ -288,6 +430,21 @@ async function connectToWhatsApp() {
             return;
         }
 
+        // Detectar si quiere agendar evento
+        if (lowText.includes('agenda:') || lowText.includes('agendar:')) {
+            try {
+                const autorNombre = from.includes('5491158660344') ? 'Rodrigo' :
+                                   from.includes('541122831781') ? 'Gabo' : 'Usuario';
+                const confirmacion = await agendarEvento(text, autorNombre);
+                await sock.sendMessage(from, { text: confirmacion });
+                return;
+            } catch (err) {
+                console.error('❌ Error agendando:', err.message);
+                await sock.sendMessage(from, { text: '❌ Error al agendar el evento.' });
+                return;
+            }
+        }
+
         // Detectar si es un pedido de canciones
         const esPedidoCanciones = await esUnPedidoDeCanciones(text);
 
@@ -329,6 +486,23 @@ async function connectToWhatsApp() {
             console.error('❌ Error:', err.message);
         }
     });
+
+    // --- CRON JOBS ---
+
+    // Verificar eventos cada 5 minutos
+    setInterval(verificarEventos, 5 * 60 * 1000);
+    console.log('📅 Verificador de eventos activo (cada 5 min)');
+
+    // Devocional diario a las 7:00 AM Argentina
+    setInterval(() => {
+        const ahora = new Date();
+        const horaArg = new Date(ahora.toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }));
+        if (horaArg.getHours() === 7 && horaArg.getMinutes() === 0) {
+            console.log('📖 Enviando devocional diario...');
+            enviarDevocionalDiario();
+        }
+    }, 60 * 1000);
+    console.log('📖 Devocional diario programado para las 7:00 AM Argentina');
 }
 
 connectToWhatsApp();
@@ -356,7 +530,49 @@ app.get('/sync', async (req, res) => {
     });
 });
 
-app.get('/', (req, res) => res.send('🎵 Roberto - Bot de canciones con Firestore'));
+app.post('/agregar-evento', async (req, res) => {
+    try {
+        const { titulo, descripcion, fechaISO, creadoPor } = req.body;
+
+        if (!titulo || !fechaISO) {
+            return res.status(400).json({ error: 'Se requieren titulo y fechaISO' });
+        }
+
+        const docRef = await db.collection('eventos').add({
+            titulo,
+            descripcion: descripcion || '',
+            fechaISO,
+            creadoPor: creadoPor || 'API',
+            notificadoDia: false,
+            notificadoHora: false,
+            fechaCreacion: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        res.json({
+            success: true,
+            message: 'Evento creado correctamente',
+            eventoId: docRef.id
+        });
+    } catch (err) {
+        console.error('❌ Error en /agregar-evento:', err.message);
+        res.status(500).json({ error: 'Error al crear el evento' });
+    }
+});
+
+app.get('/eventos', async (req, res) => {
+    try {
+        const snapshot = await db.collection('eventos').orderBy('fechaISO').get();
+        const eventos = [];
+        snapshot.forEach(doc => {
+            eventos.push({ id: doc.id, ...doc.data() });
+        });
+        res.json({ success: true, eventos });
+    } catch (err) {
+        res.status(500).json({ error: 'Error al obtener eventos' });
+    }
+});
+
+app.get('/', (req, res) => res.send('🎵 Roberto - Bot de canciones con Firestore y calendario'));
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`🚀 Puerto ${PORT} activo`));
