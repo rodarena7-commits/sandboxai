@@ -84,15 +84,33 @@ lastQR = cargarQRGuardado() || "";
 
 // --- FUNCIONES DE DRIVE Y GROQ ---
 
-async function listarLetrasEnDrive() {
+async function listarLetrasEnDrive(folderId = LETRAS_FOLDER_ID, archivos = []) {
     if (!driveClient) return [];
     try {
-        const res = await driveClient.files.list({
-            q: `'${LETRAS_FOLDER_ID}' in parents and mimeType='application/vnd.google-apps.document' and trashed=false`,
+        // Listar archivos en esta carpeta
+        const resFiles = await driveClient.files.list({
+            q: `'${folderId}' in parents and mimeType='application/vnd.google-apps.document' and trashed=false`,
             fields: 'files(id, name)',
             pageSize: 100,
         });
-        return res.data.files || [];
+        if (resFiles.data.files) {
+            archivos.push(...resFiles.data.files);
+        }
+
+        // Listar subcarpetas y buscar recursivamente
+        const resFolders = await driveClient.files.list({
+            q: `'${folderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+            fields: 'files(id, name)',
+            pageSize: 100,
+        });
+
+        if (resFolders.data.files && resFolders.data.files.length > 0) {
+            for (const carpeta of resFolders.data.files) {
+                await listarLetrasEnDrive(carpeta.id, archivos);
+            }
+        }
+
+        return archivos;
     } catch (err) {
         console.error('❌ Error listando Drive:', err.message);
         return [];
