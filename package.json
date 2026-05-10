@@ -1,22 +1,15 @@
 {
-  "name": "clon-rodri-bot",
+  "name": "roberto-bot",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "firebase-admin": "^12.0.0",
-    "googleapis": "^171.4.0",
-    "openai": "^6.36.0",
     "pino": "^10.3.1",
     "qrcode-terminal": "^0.12.0"
   }
