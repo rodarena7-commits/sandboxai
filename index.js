@@ -188,38 +188,28 @@ async function leerContenidoDoc(fileId, mimeType = 'application/vnd.google-apps.
     }
 }
 
-async function obtenerCancionesConGemini(tituloSermon, catalogoCanciones) {
+async function obtenerCancionesConGemini(tituloSermon, nombreArchivos) {
     try {
-        console.log('🤖 Consultando Gemini para análisis de canciones...');
+        console.log('🤖 Consultando Gemini para seleccionar archivos...');
         const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
         const prompt = `Sos un ministro de alabanza cristiano con profundo conocimiento bíblico y musical.
-Tu tarea es seleccionar las canciones más apropiadas para un sermón específico.
-
 El tema del sermón es: "${tituloSermon}"
 
-A continuación están las letras de las canciones disponibles en el Drive:
+A continuación están los nombres de archivos de canciones disponibles en el Drive:
+${nombreArchivos}
 
-${catalogoCanciones}
-
-Seleccioná las 7 canciones más apropiadas para este tema.
-Para CADA canción, mostrá SOLO:
-1. El nombre/título de la canción
-2. Los primeros 7 renglones de la letra o el estribillo (la parte que se repite)
-
-Formato:
-1. [TÍTULO]
-[primeros 7 renglones de letra o estribillo]
-
-2. [TÍTULO]
-[primeros 7 renglones de letra o estribillo]
-
-(continúa hasta 7)
-
-NO agregues explicaciones, justificaciones ni numeración adicional. Solo título y letra.`;
+Seleccioná SOLO los nombres de los 7 archivos más apropiados para este tema.
+Respondé únicamente con los nombres de los archivos, uno por línea, sin numeración ni explicaciones.`;
 
         const result = await model.generateContent(prompt);
-        return result.response.text();
+        const archivosSeleccionados = result.response.text()
+            .split('\n')
+            .map(l => l.trim())
+            .filter(l => l.length > 0)
+            .slice(0, 7);
+
+        return archivosSeleccionados;
     } catch (err) {
         console.error('❌ Error Gemini:', err.message);
         return null;
@@ -233,77 +223,66 @@ async function obtenerCancionesParaSermon(tituloSermon) {
     if (archivos.length === 0) {
         return "No encontré archivos de letras en el Drive. Verificá el DRIVE_FOLDER_ID.";
     }
-    console.log(`📂 Encontré ${archivos.length} archivos en Drive. Leyendo TODO el contenido...`);
 
-    // Leer TODOS los archivos (no limitado a 50)
-    const contenidos = await Promise.all(
-        archivos.map(async (archivo) => {
-            const esGoogleDoc = !archivo.name.toLowerCase().endsWith('.pdf');
-            const mimeType = esGoogleDoc ? 'application/vnd.google-apps.document' : 'application/pdf';
-            const texto = await leerContenidoDoc(archivo.id, mimeType);
-            return { nombre: archivo.name, letra: texto };
-        })
-    );
+    const nombreArchivos = archivos.map(a => a.name).join('\n');
+    console.log(`📂 Encontré ${archivos.length} archivos. Consultando con IAs para seleccionar 7...`);
 
-    const catalogoCanciones = contenidos
-        .filter(c => c.letra.trim().length > 0)
-        .map((c, i) => `--- CANCIÓN ${i + 1}: "${c.nombre}" ---\n${c.letra}`)
-        .join('\n\n');
-
-    console.log(`✅ Procesados ${contenidos.length} archivos. Consultando IAs...`);
+    let archivosSeleccionados = [];
 
     // Intentar primero con Gemini
-    let respuestaGemini = await obtenerCancionesConGemini(tituloSermon, catalogoCanciones);
+    archivosSeleccionados = await obtenerCancionesConGemini(tituloSermon, nombreArchivos);
 
-    if (respuestaGemini) {
-        console.log('✅ Respuesta obtenida de Gemini');
-        return respuestaGemini;
+    if (!archivosSeleccionados || archivosSeleccionados.length === 0) {
+        console.log('⚠️ Gemini no respondió, usando Groq como fallback...');
+        try {
+            const response = await groq.chat.completions.create({
+                model: "llama-3.3-70b-versatile",
+                max_tokens: 500,
+                messages: [
+                    {
+                        role: "system",
+                        content: `Sos un ministro de alabanza cristiano. El tema del sermón es: "${tituloSermon}"`
+                    },
+                    {
+                        role: "user",
+                        content: `Archivos disponibles:\n${nombreArchivos}\n\nSeleccioná solo los nombres de los 7 archivos más apropiados, uno por línea, sin numeración.`
+                    }
+                ]
+            });
+            archivosSeleccionados = response.choices[0].message.content
+                .split('\n')
+                .map(l => l.trim())
+                .filter(l => l.length > 0)
+                .slice(0, 7);
+            console.log('✅ Selección obtenida de Groq');
+        } catch (err) {
+            console.error('❌ Error Groq:', err.message);
+            return "Error consultando con IA. Intentá más tarde.";
+        }
+    } else {
+        console.log('✅ Selección obtenida de Gemini');
     }
 
-    // Si Gemini falla, usar Groq como fallback
-    console.log('⚠️ Gemini no respondió, usando Groq como fallback...');
-    try {
-        const response = await groq.chat.completions.create({
-            model: "llama-3.3-70b-versatile",
-            max_tokens: 2000,
-            messages: [
-                {
-                    role: "system",
-                    content: `Sos un ministro de alabanza cristiano con profundo conocimiento bíblico y musical.
-Tu tarea es seleccionar las canciones más apropiadas para un sermón específico.`
-                },
-                {
-                    role: "user",
-                    content: `El tema del sermón es: "${tituloSermon}"
+    // Leer los 7 archivos seleccionados
+    console.log(`📖 Leyendo ${archivosSeleccionados.length} archivos seleccionados...`);
+    const contenidos = [];
 
-A continuación están las letras de las canciones disponibles:
+    for (const nombreSeleccionado of archivosSeleccionados) {
+        const archivo = archivos.find(a => a.name === nombreSeleccionado);
+        if (!archivo) continue;
 
-${catalogoCanciones}
+        const esGoogleDoc = !archivo.name.toLowerCase().endsWith('.pdf');
+        const mimeType = esGoogleDoc ? 'application/vnd.google-apps.document' : 'application/pdf';
+        const texto = await leerContenidoDoc(archivo.id, mimeType);
 
-Seleccioná las 7 canciones más apropiadas para este tema.
-Para CADA canción, mostrá SOLO:
-1. El nombre/título de la canción
-2. Los primeros 7 renglones de la letra o el estribillo (la parte que se repite)
-
-Formato:
-1. [TÍTULO]
-[primeros 7 renglones de letra o estribillo]
-
-2. [TÍTULO]
-[primeros 7 renglones de letra o estribillo]
-
-(continúa hasta 7)
-
-NO agregues explicaciones, justificaciones ni numeración adicional. Solo título y letra.`
-                }
-            ]
-        });
-        console.log('✅ Respuesta obtenida de Groq');
-        return response.choices[0].message.content;
-    } catch (err) {
-        console.error('❌ Error Groq:', err.message);
-        return "Error consultando con IA. Intentá más tarde.";
+        if (texto.trim().length > 0) {
+            const titulo = archivo.name.replace(/\.(pdf|doc|docx)$/i, '');
+            const fragmento = texto.split('\n').slice(0, 7).join('\n');
+            contenidos.push(`${titulo}\n${fragmento}`);
+        }
     }
+
+    return contenidos.join('\n\n---\n\n');
 }
 
 // --- WHATSAPP ---
