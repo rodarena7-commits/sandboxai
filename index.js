@@ -221,7 +221,7 @@ async function obtenerCancionesParaSermon(tituloSermon) {
 
     const archivos = await listarLetrasEnDrive();
     if (archivos.length === 0) {
-        return "No encontré archivos de letras en el Drive. Verificá el DRIVE_FOLDER_ID.";
+        return "No encontré archivos de letras en el Drive. Verificá que la carpeta esté compartida con: sandboxai@gen-lang-client-0081416184.iam.gserviceaccount.com";
     }
 
     const nombreArchivos = archivos.map(a => a.name).join('\n');
@@ -231,6 +231,7 @@ async function obtenerCancionesParaSermon(tituloSermon) {
 
     // Intentar primero con Gemini
     archivosSeleccionados = await obtenerCancionesConGemini(tituloSermon, nombreArchivos);
+    archivosSeleccionados = (archivosSeleccionados || []).slice(0, 7);
 
     if (!archivosSeleccionados || archivosSeleccionados.length === 0) {
         console.log('⚠️ Gemini no respondió, usando Groq como fallback...');
@@ -241,11 +242,11 @@ async function obtenerCancionesParaSermon(tituloSermon) {
                 messages: [
                     {
                         role: "system",
-                        content: `Sos un ministro de alabanza cristiano. El tema del sermón es: "${tituloSermon}"`
+                        content: `Sos un ministro de alabanza cristiano.`
                     },
                     {
                         role: "user",
-                        content: `Archivos disponibles:\n${nombreArchivos}\n\nSeleccioná solo los nombres de los 7 archivos más apropiados, uno por línea, sin numeración.`
+                        content: `Tema: "${tituloSermon}"\n\nArchivos:\n${nombreArchivos}\n\nElige 7 nombres de archivos. Solo nombres, uno por línea.`
                     }
                 ]
             });
@@ -263,11 +264,11 @@ async function obtenerCancionesParaSermon(tituloSermon) {
         console.log('✅ Selección obtenida de Gemini');
     }
 
-    // Leer los 7 archivos seleccionados
-    console.log(`📖 Leyendo ${archivosSeleccionados.length} archivos seleccionados...`);
+    // Leer solo los 7 archivos seleccionados
+    console.log(`📖 Leyendo 7 archivos seleccionados...`);
     const contenidos = [];
 
-    for (const nombreSeleccionado of archivosSeleccionados) {
+    for (const nombreSeleccionado of archivosSeleccionados.slice(0, 7)) {
         const archivo = archivos.find(a => a.name === nombreSeleccionado);
         if (!archivo) continue;
 
@@ -277,12 +278,13 @@ async function obtenerCancionesParaSermon(tituloSermon) {
 
         if (texto.trim().length > 0) {
             const titulo = archivo.name.replace(/\.(pdf|doc|docx)$/i, '');
-            const fragmento = texto.split('\n').slice(0, 7).join('\n');
+            const lineas = texto.split('\n').filter(l => l.trim().length > 0).slice(0, 7);
+            const fragmento = lineas.join('\n');
             contenidos.push(`${titulo}\n${fragmento}`);
         }
     }
 
-    return contenidos.join('\n\n---\n\n');
+    return contenidos.length > 0 ? contenidos.join('\n\n---\n\n') : "No pude leer las canciones. Verificá que la carpeta esté compartida.";
 }
 
 // --- WHATSAPP ---
