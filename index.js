@@ -169,8 +169,12 @@ async function leerContenidoDoc(fileId, mimeType = 'application/vnd.google-apps.
             const resDownload = await driveClient.files.get({
                 fileId,
                 alt: 'media',
+                responseType: 'arraybuffer'
+            }, {
+                responseType: 'arraybuffer'
             });
-            const pdfData = await pdfParse(resDownload.data);
+            const pdfBuffer = Buffer.from(resDownload.data);
+            const pdfData = await pdfParse(pdfBuffer);
             texto = pdfData.text;
         } else {
             // Google Doc - exportar como texto plano
@@ -181,7 +185,7 @@ async function leerContenidoDoc(fileId, mimeType = 'application/vnd.google-apps.
             texto = String(resExport.data);
         }
 
-        return texto.substring(0, 1500);
+        return texto.substring(0, 2000);
     } catch (err) {
         console.error(`❌ Error leyendo archivo ${fileId}:`, err.message);
         return "";
@@ -225,62 +229,59 @@ async function obtenerCancionesParaSermon(tituloSermon) {
     }
 
     const nombreArchivos = archivos.map(a => a.name).join('\n');
-    console.log(`📂 Encontré ${archivos.length} archivos. Consultando con IAs para seleccionar 7...`);
+    console.log(`📂 Encontré ${archivos.length} archivos. Usando Groq para seleccionar 7...`);
 
     let archivosSeleccionados = [];
 
-    // Intentar primero con Gemini
-    archivosSeleccionados = await obtenerCancionesConGemini(tituloSermon, nombreArchivos);
-    archivosSeleccionados = (archivosSeleccionados || []).slice(0, 7);
-
-    if (!archivosSeleccionados || archivosSeleccionados.length === 0) {
-        console.log('⚠️ Gemini no respondió, usando Groq como fallback...');
-        try {
-            const response = await groq.chat.completions.create({
-                model: "llama-3.3-70b-versatile",
-                max_tokens: 500,
-                messages: [
-                    {
-                        role: "system",
-                        content: `Sos un ministro de alabanza cristiano.`
-                    },
-                    {
-                        role: "user",
-                        content: `Tema: "${tituloSermon}"\n\nArchivos:\n${nombreArchivos}\n\nElige 7 nombres de archivos. Solo nombres, uno por línea.`
-                    }
-                ]
-            });
-            archivosSeleccionados = response.choices[0].message.content
-                .split('\n')
-                .map(l => l.trim())
-                .filter(l => l.length > 0)
-                .slice(0, 7);
-            console.log('✅ Selección obtenida de Groq');
-        } catch (err) {
-            console.error('❌ Error Groq:', err.message);
-            return "Error consultando con IA. Intentá más tarde.";
-        }
-    } else {
-        console.log('✅ Selección obtenida de Gemini');
+    // Usar Groq directamente (Gemini tiene quota 0 en proyecto nuevo)
+    try {
+        const response = await groq.chat.completions.create({
+            model: "llama-3.3-70b-versatile",
+            max_tokens: 500,
+            messages: [
+                {
+                    role: "system",
+                    content: `Sos un ministro de alabanza cristiano. Tema del sermón: "${tituloSermon}"`
+                },
+                {
+                    role: "user",
+                    content: `Archivos disponibles:\n${nombreArchivos}\n\nSelecciona 7 nombres exactos de archivos (tal como aparecen en la lista), uno por línea. Solo nombres, nada más.`
+                }
+            ]
+        });
+        archivosSeleccionados = response.choices[0].message.content
+            .split('\n')
+            .map(l => l.trim())
+            .filter(l => l.length > 0)
+            .slice(0, 7);
+        console.log(`✅ Selección obtenida de Groq (${archivosSeleccionados.length} canciones)`);
+    } catch (err) {
+        console.error('❌ Error Groq:', err.message);
+        return "Error consultando con IA. Intentá más tarde.";
     }
 
     // Leer solo los 7 archivos seleccionados
-    console.log(`📖 Leyendo 7 archivos seleccionados...`);
+    console.log(`📖 Leyendo ${archivosSeleccionados.length} archivos seleccionados...`);
     const contenidos = [];
 
-    for (const nombreSeleccionado of archivosSeleccionados.slice(0, 7)) {
+    for (const nombreSeleccionado of archivosSeleccionados) {
         const archivo = archivos.find(a => a.name === nombreSeleccionado);
-        if (!archivo) continue;
+        if (!archivo) {
+            console.warn(`⚠️ No encontré archivo: ${nombreSeleccionado}`);
+            continue;
+        }
 
         const esGoogleDoc = !archivo.name.toLowerCase().endsWith('.pdf');
         const mimeType = esGoogleDoc ? 'application/vnd.google-apps.document' : 'application/pdf';
         const texto = await leerContenidoDoc(archivo.id, mimeType);
 
-        if (texto.trim().length > 0) {
-            const titulo = archivo.name.replace(/\.(pdf|doc|docx)$/i, '');
+        if (texto && texto.trim().length > 0) {
+            const titulo = archivo.name.replace(/\.(pdf|doc|docx)$/i, '').trim();
             const lineas = texto.split('\n').filter(l => l.trim().length > 0).slice(0, 7);
             const fragmento = lineas.join('\n');
-            contenidos.push(`${titulo}\n${fragmento}`);
+            if (fragmento.length > 0) {
+                contenidos.push(`${titulo}\n${fragmento}`);
+            }
         }
     }
 
