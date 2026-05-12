@@ -29,8 +29,9 @@ let isConnected = false;
 
 // --- GROQ CONFIG ---
 const groq = new OpenAI({
-  apiKey: process.env.GROQ_API_KEY,
+  apiKey: process.env.GROQ_API_KEY || "fake-key-for-groq",
   baseURL: "https://api.groq.com/openai/v1",
+  dangerouslyAllowBrowser: true
 });
 
 // --- GEMINI CONFIG ---
