@@ -159,6 +159,26 @@ async function listarLetrasEnDrive(folderId = LETRAS_FOLDER_ID, archivos = []) {
     }
 }
 
+function esLineaDeLirica(linea) {
+    const cleaned = linea.trim();
+    if (cleaned.length === 0) return false;
+
+    // Excluir líneas técnicas
+    const exclusiones = [
+        /^[A-G][#b]?m?sus?[247]?(\s|\/|$)/i,  // Acordes (Em, G/B, Dsus4, etc.)
+        /^intro/i, /^verso/i, /^estribillo/i, /^puente/i, /^coro/i, /^final/i,  // Secciones
+        /^tono\s*[-–]/i, /^bpm/i, /^tempo/i, /^key\s*[-–]/i,  // Notación musical
+        /©|copyright|todos los derechos|administración|www\.|\.com|\.org|ccli/i,  // Copyright
+        /^música y letra|^letra original|^autor|^compositor|^jonath|^paul\s*david/i,  // Créditos
+        /^[\d\.\s|:xq°=–-]+$/,  // Solo números, puntos, símbolos
+        /^\|\s*:|^\|:/,  // Notación de acordes
+        /sovereign grace|integrity music|cross/i,  // Discográficas
+        /nuevas misericordias|reflexiones|devocionales|evangelio/i  // Contenido no lírico
+    ];
+
+    return !exclusiones.some(regex => regex.test(cleaned));
+}
+
 async function leerContenidoDoc(fileId, mimeType = 'application/vnd.google-apps.document') {
     if (!driveClient) return "";
     try {
@@ -185,7 +205,13 @@ async function leerContenidoDoc(fileId, mimeType = 'application/vnd.google-apps.
             texto = String(resExport.data);
         }
 
-        return texto.substring(0, 2000);
+        // Filtrar solo líneas que son letras de canciones
+        const lineas = texto
+            .split('\n')
+            .filter(esLineaDeLirica)
+            .slice(0, 10);  // Primeras 10 líneas de letra pura
+
+        return lineas.join('\n');
     } catch (err) {
         console.error(`❌ Error leyendo archivo ${fileId}:`, err.message);
         return "";
