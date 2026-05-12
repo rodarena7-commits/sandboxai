@@ -194,9 +194,7 @@ async function obtenerCancionesConGemini(tituloSermon, catalogoCanciones) {
         const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
         const prompt = `Sos un ministro de alabanza cristiano con profundo conocimiento bíblico y musical.
-Tu tarea es analizar letras de canciones y seleccionar las más apropiadas para un sermón específico.
-Respondé siempre en español, con un tono cálido y pastoral.
-Sé conciso pero significativo en las justificaciones.
+Tu tarea es seleccionar las canciones más apropiadas para un sermón específico.
 
 El tema del sermón es: "${tituloSermon}"
 
@@ -204,11 +202,21 @@ A continuación están las letras de las canciones disponibles en el Drive:
 
 ${catalogoCanciones}
 
-Por favor, seleccioná las 10 canciones más apropiadas para este tema. Para cada una indicá:
-1. El nombre de la canción
-2. Por qué se recomienda (2-3 oraciones explicando la conexión temática)
+Seleccioná las 7 canciones más apropiadas para este tema.
+Para CADA canción, mostrá SOLO:
+1. El nombre/título de la canción
+2. Los primeros 7 renglones de la letra o el estribillo (la parte que se repite)
 
-Presentá la lista numerada del 1 al 10, ordenada de la más a la menos recomendada.`;
+Formato:
+1. [TÍTULO]
+[primeros 7 renglones de letra o estribillo]
+
+2. [TÍTULO]
+[primeros 7 renglones de letra o estribillo]
+
+(continúa hasta 7)
+
+NO agregues explicaciones, justificaciones ni numeración adicional. Solo título y letra.`;
 
         const result = await model.generateContent(prompt);
         return result.response.text();
@@ -262,9 +270,7 @@ async function obtenerCancionesParaSermon(tituloSermon) {
                 {
                     role: "system",
                     content: `Sos un ministro de alabanza cristiano con profundo conocimiento bíblico y musical.
-Tu tarea es analizar letras de canciones y seleccionar las más apropiadas para un sermón específico.
-Respondé siempre en español, con un tono cálido y pastoral.
-Sé conciso pero significativo en las justificaciones.`
+Tu tarea es seleccionar las canciones más apropiadas para un sermón específico.`
                 },
                 {
                     role: "user",
@@ -274,11 +280,21 @@ A continuación están las letras de las canciones disponibles:
 
 ${catalogoCanciones}
 
-Por favor, seleccioná las 10 canciones más apropiadas para este tema. Para cada una indicá:
-1. El nombre de la canción
-2. Por qué se recomienda (2-3 oraciones explicando la conexión temática)
+Seleccioná las 7 canciones más apropiadas para este tema.
+Para CADA canción, mostrá SOLO:
+1. El nombre/título de la canción
+2. Los primeros 7 renglones de la letra o el estribillo (la parte que se repite)
 
-Presentá la lista numerada del 1 al 10, ordenada de la más a la menos recomendada.`
+Formato:
+1. [TÍTULO]
+[primeros 7 renglones de letra o estribillo]
+
+2. [TÍTULO]
+[primeros 7 renglones de letra o estribillo]
+
+(continúa hasta 7)
+
+NO agregues explicaciones, justificaciones ni numeración adicional. Solo título y letra.`
                 }
             ]
         });
@@ -291,6 +307,7 @@ Presentá la lista numerada del 1 al 10, ordenada de la más a la menos recomend
 }
 
 // --- WHATSAPP ---
+let reconnectAttempts = 0;
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
     const { version } = await fetchLatestBaileysVersion();
@@ -305,7 +322,13 @@ async function connectToWhatsApp() {
         browser: ["Roberto", "Chrome", "1.0.0"],
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: 0,
-        keepAliveIntervalMs: 10000
+        keepAliveIntervalMs: 30000,
+        qrTimeout: 60000,
+        retryRequestDelayMs: 100,
+        shouldIgnoreJidEndingSemicolon: false,
+        disableSharing: true,
+        emitOwnEventsOnly: true,
+        markOnlineOnConnect: true
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -316,19 +339,30 @@ async function connectToWhatsApp() {
             lastQR = qr;
             guardarQR(qr);
             qrcode.generate(qr, { small: true });
+            reconnectAttempts = 0;
         }
         if (connection === 'close') {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-            console.log(`⚠️ Conexión cerrada (Código: ${statusCode}). Reconectando: ${shouldReconnect}`);
+            if (statusCode !== 440) {
+                console.log(`⚠️ Conexión cerrada (Código: ${statusCode}). Reconectando: ${shouldReconnect}`);
+            }
             isConnected = false;
-            if (shouldReconnect) connectToWhatsApp();
-            else {
+            if (shouldReconnect) {
+                reconnectAttempts++;
+                if (reconnectAttempts <= 10) {
+                    setTimeout(() => connectToWhatsApp(), 3000);
+                } else {
+                    console.error('❌ Máximo de intentos de reconexión alcanzado');
+                }
+            } else {
                 lastQR = "";
+                reconnectAttempts = 0;
                 if (fs.existsSync(QR_FILE)) fs.unlinkSync(QR_FILE);
             }
         } else if (connection === 'open') {
             isConnected = true;
+            reconnectAttempts = 0;
             console.log('✅ WHATSAPP CONECTADO!');
         }
     });
